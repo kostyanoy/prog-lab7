@@ -30,7 +30,6 @@ dependencies {
     implementation("io.insert-koin:koin-core:$koinVersion")
     implementation("org.slf4j:slf4j-log4j12:2.0.6")
     implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")
-    implementation("org.jetbrains.exposed:exposed-core:0.41.1")
 
     implementation(project(":common"))
 }
@@ -46,7 +45,7 @@ tasks.withType<KotlinCompile> {
 
 tasks.jar {
     manifest {
-        attributes["Main-Class"] = "ServerKt"
+        attributes["Main-Class"] = "GatewayKt"
     }
     configurations["compileClasspath"].forEach { file: File ->
         from(zipTree(file.absoluteFile))
@@ -56,5 +55,5 @@ tasks.jar {
 
 
 application {
-    mainClass.set("ServerKt")
+    mainClass.set("GatewayKt")
 }
