@@ -1,9 +1,10 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.7.10"
-    id("org.jetbrains.kotlin.plugin.serialization") version "1.8.20-Beta"
-    id("org.jetbrains.dokka") version "1.7.20"
+    kotlin("jvm")
+    id("org.jetbrains.kotlin.plugin.serialization")
+    id("org.jetbrains.dokka")
+    id("io.github.kostyanoy.helios-push")
     application
 }
 
@@ -15,24 +16,36 @@ repositories {
 }
 
 dependencies {
-    val kotlinVersion = "1.8.0"
-    val koinVersion = "3.3.3"
-    val mockkVersion = "1.13.4"
+    val kotlinVersion: String by project
+    val koinVersion: String by project
+    val mockkVersion: String by project
+    val junitVersion: String by project
+    val serializationVersion: String by project
+    val kotlinLoggingVersion: String by project
+    val slf4Version: String by project
+    val exposedVersion: String by project
+    val postreVersion: String by project
 
-    testImplementation("org.junit.jupiter:junit-jupiter:5.9.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:${mockkVersion}")
     testImplementation("io.insert-koin:koin-test-junit5:$koinVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test:$kotlinVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlinVersion")
     implementation(kotlin("serialization", version = kotlinVersion))
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
     implementation("io.insert-koin:koin-core:$koinVersion")
-    implementation("org.slf4j:slf4j-log4j12:2.0.6")
-    implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")
-    implementation("org.jetbrains.exposed:exposed-core:0.41.1")
+    implementation("org.slf4j:slf4j-log4j12:$slf4Version")
+    implementation("io.github.microutils:kotlin-logging-jvm:$kotlinLoggingVersion")
+    implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
+    implementation("org.postgresql:postgresql:$postreVersion")
 
     implementation(project(":common"))
+}
+
+configurations.all {
+    resolutionStrategy.sortArtifacts(ResolutionStrategy.SortOrder.DEPENDENCY_FIRST)
 }
 
 
@@ -54,6 +67,16 @@ tasks.jar {
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
 }
 
+
+tasks.helios {
+    projectName = "lab7"
+    isu = "367379"
+    folderPath = "~/labs/programming"
+    val arr = arrayOf(
+        "build/libs/server-1.0-SNAPSHOT.jar",
+    )
+    files = arr
+}
 
 application {
     mainClass.set("ServerKt")
