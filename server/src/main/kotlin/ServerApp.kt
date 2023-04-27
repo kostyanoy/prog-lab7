@@ -1,127 +1,83 @@
 import data.MusicBand
+import kotlinx.coroutines.coroutineScope
 import org.apache.log4j.Logger
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import org.koin.java.KoinJavaComponent.inject
 import serialize.FrameSerializer
 import utils.CommandManager
 import utils.Saver
 import utils.Storage
+import java.net.ConnectException
 import java.net.InetSocketAddress
+import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
-import java.nio.channels.SelectionKey
-import java.nio.channels.Selector
-import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
 
-/**
-
-The ServerApp class represents the server application that listens to incoming client requests,executes them and sends back the response.
-
-@property [running] A boolean value indicating whether the server is running or not.
-@property [selector] The Selector instance used for selecting incoming channels and operations.
-@property [serverChannel] The ServerSocketChannel instance used to listen for incoming requests.
- */
 class ServerApp(
-    private val port: Int,
+    private val gatewayAddress: String,
+    private val gatewayPort: Int,
+    private val port: Int
 ) : KoinComponent {
-    private val commandManager: CommandManager by inject()
+    private val frameSerializer by inject<FrameSerializer>()
     private val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
     private val storage: Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand> by inject()
     private val serializer = FrameSerializer()
     private val logger = Logger.getLogger(ServerApp::class.java)
-    var running = true
-    private var selector: Selector = Selector.open()
-    private lateinit var serverChannel: ServerSocketChannel
-    lateinit var onConnect: (SelectionKey, Selector) -> Unit
-    lateinit var onDisconnect: (SelectionKey, SocketChannel) -> Unit
+    private lateinit var channel: SocketChannel
 
-    /**
-    Starts the server and listens for incoming client requests.
-     */
+    //1 блок
+    //подключается к GatewayLBService как клиент
     fun start() {
-        val serverChannel = ServerSocketChannel.open()
-        serverChannel.bind(InetSocketAddress(port))
-        serverChannel.configureBlocking(false)
-        logger.info("Сервер запускается на порту: $port")
-        serverChannel.register(selector, SelectionKey.OP_ACCEPT)
-
-        while (running) {
-            selector.select()
-            val selectedKeys = selector.selectedKeys().iterator()
-
-            while (selectedKeys.hasNext()) {
-                val key = selectedKeys.next()
-                selectedKeys.remove()
-
-                if (!key.isValid) {
-                    continue
-                }
-
-                if (key.isAcceptable) {
-                    onConnect(key, selector)
-                    //acceptConnection(key, selector)
-                } else if (key.isReadable) {
-                    readRequest(key, selector)
-                }
-            }
-        }
-        serverChannel.close()
-        selector.close()
-        logger.info("Сервер закрыт")
-    }
-
-    /**
-    Accepts a new incoming connection and registers it with the selector.
-
-    @param [key] The SelectionKey of the incoming connection.
-    @param [selector] The Selector instance used for selecting incoming channels and operations.
-     */
-    fun acceptConnection(key: SelectionKey, selector: Selector) {
-        val serverSocketChannel = key.channel() as ServerSocketChannel
-        val socketChannel = serverSocketChannel.accept()
-        socketChannel.configureBlocking(false)
-        socketChannel.register(selector, SelectionKey.OP_READ)
-    }
-
-    /**
-    Reads the incoming request from the client, executes it and sends back the response.
-
-    @param [key] The SelectionKey of the incoming request.
-    @param [selector] The Selector instance used for selecting incoming channels and operations.
-     */
-    private fun readRequest(key: SelectionKey, selector: Selector) {
-        val socketChannel = key.channel() as SocketChannel
-        val buffer = ByteBuffer.allocate(1024)
-
         try {
-            socketChannel.read(buffer)
-            buffer.flip()
-            val len = buffer.limit() - buffer.position()
-            val str = ByteArray(len)
-            buffer.get(str, buffer.position(), len)
-            buffer.flip()
-            val request = serializer.deserialize(str.decodeToString())
-            val response = clientRequest(request)
-            buffer.clear()
-            buffer.put(serializer.serialize(response).toByteArray())
-            buffer.put('\n'.code.toByte())
-            buffer.flip()
-            socketChannel.write(buffer)
-        } catch (e: Exception) {
-            logger.error(e.message)
-            onDisconnect(key, socketChannel)
-//            key.cancel()
-//            socketChannel.close()
+            channel = SocketChannel.open()
+            channel.socket().connect(InetSocketAddress(gatewayAddress, gatewayPort), 5000)
+            logger.info { "Подключено к  GatewayLBService: $gatewayAddress:$gatewayPort" }
+        } catch (e: SocketTimeoutException) {
+            logger.info { "GatewayLBService не отвечает (${e.message})" }
+        } catch (e: ConnectException) {
+            logger.info { "Не удается подключиться к GatewayLBService (${e.message})" }
         }
     }
 
-    /**
-    Processes a client request and returns a response frame.
+    fun stop() {
+        if (channel.isOpen) {
+            channel.close()
+            logger.info { "Канал закрыт" }
+        }
+    }
+    //1 блок
+    private fun sendRequest(request: Frame): Frame {
+        val buffer = ByteBuffer.allocate(1024)
+        buffer.put(serializer.serialize(request).toByteArray())
+        buffer.put('\n'.code.toByte())
+        buffer.flip()
+        channel.write(buffer)
+        buffer.clear()
+        channel.read(buffer)
+        buffer.flip()
+        val len = buffer.limit() - buffer.position()
+        val str = ByteArray(len)
+        buffer.get(str, buffer.position(), len)
+        return serializer.deserialize(str.decodeToString())
+    }
 
-    @param [request] the request frame received from the client
-    @return the response frame to be sent back to the client
-     */
-    private fun clientRequest(request: Frame): Frame {
+    fun receiveFromGatewayLBService(): Frame {
+        val array = ArrayList<Byte>()
+        var char = channel.socket().getInputStream().read().toChar()
+        while (char != '\n') {
+            array.add(char.toByte())
+            char = channel.socket().getInputStream().read().toChar()
+        }
+        val str = String(array.toByteArray())
+        val frame = frameSerializer.deserialize(str)
+        logger.info { "Получен ответ от GatewayLBService ${frame.type}" }
+        return frame
+    }
+
+    //3 блок
+    //получает распакованный ключ
+    private fun serverRequest(request: Frame): Frame {
         return when (request.type) {
             FrameType.COMMAND_REQUEST -> {
                 val response = Frame(FrameType.COMMAND_RESPONSE)
@@ -132,6 +88,7 @@ class ServerApp(
                 response.setValue("data", result)
                 response
             }
+
 
             FrameType.LIST_OF_COMMANDS_REQUEST -> {
                 val response = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
@@ -147,23 +104,29 @@ class ServerApp(
             }
         }
     }
-
-    /**
-    Stops the server
-     */
-    fun stop() {
-        running = false
-        selector.wakeup()
+    //кидает ответ глбс
+    private fun sendResponse(socketChannel: SocketChannel, response: Frame) {
+        val buffer = ByteBuffer.allocate(1024)
+        buffer.put(serializer.serialize(response).toByteArray())
+        buffer.put('\n'.code.toByte())
+        buffer.flip()
+        socketChannel.write(buffer)
+        buffer.clear()
     }
+    //3 блок
 
-    fun saveCollection() {
+
+    //неизменяемый блок
+    private fun saveCollection() {
         val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
         saver.save(storage.getCollection { true })
         logger.info("Коллекция сохранена")
     }
 
-    fun loadCollection() {
+    private fun loadCollection() {
+        val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
         saver.load().forEach { storage.insert(it.key, it.value) }
         logger.info("Коллекция загружена")
     }
+    //неизменяемый блок
 }
