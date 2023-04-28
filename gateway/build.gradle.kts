@@ -15,6 +15,9 @@ repositories {
 }
 
 dependencies {
+    implementation(project(mapOf("path" to ":common")))
+    implementation(project(mapOf("path" to ":common")))
+    implementation(project(mapOf("path" to ":server")))
     val kotlinVersion = "1.8.0"
     val koinVersion = "3.3.3"
     val mockkVersion = "1.13.4"
