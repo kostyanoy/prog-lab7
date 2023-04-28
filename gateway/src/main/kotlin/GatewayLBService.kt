@@ -53,7 +53,7 @@ class GatewayLBService(
                             clientChannel.close()
                         }
                     }
-                    iterator.remove() // удаляем обработанный ключ из множества
+                    iterator.remove()
                 }
             }
             //серверы
@@ -67,7 +67,7 @@ class GatewayLBService(
                     } else if (key.isReadable) {
                         readServerRequest(key, clientSelector, serverSelector) // читаем запрос от сервера
                     }
-                    iterator.remove() // удаляем обработанный ключ из множества
+                    iterator.remove()
                 }
             }
 
