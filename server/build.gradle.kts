@@ -25,6 +25,7 @@ dependencies {
     val slf4Version: String by project
     val exposedVersion: String by project
     val postreVersion: String by project
+    val hikariVersion: String by project
 
     testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
     testImplementation(kotlin("test"))
@@ -39,7 +40,9 @@ dependencies {
     implementation("io.github.microutils:kotlin-logging-jvm:$kotlinLoggingVersion")
     implementation("org.jetbrains.exposed:exposed-core:$exposedVersion")
     implementation("org.jetbrains.exposed:exposed-jdbc:$exposedVersion")
+    implementation("org.jetbrains.exposed:exposed-java-time:$exposedVersion")
     implementation("org.postgresql:postgresql:$postreVersion")
+    implementation("com.zaxxer:HikariCP:$hikariVersion")
 
     implementation(project(":common"))
 }
