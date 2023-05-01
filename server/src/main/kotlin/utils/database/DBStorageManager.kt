@@ -17,7 +17,8 @@ import kotlin.concurrent.write
 /**
  * Works with the collection in the database and stored in the memory
  *
- * @param database
+ * @param database that gives connections
+ * @throws CommandException if checks in methods failed
  */
 class DBStorageManager(private val database: Database) : Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand> {
     private val date: LocalDateTime = LocalDateTime.now()

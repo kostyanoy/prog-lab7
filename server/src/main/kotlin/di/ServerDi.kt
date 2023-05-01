@@ -11,11 +11,13 @@ import utils.CommandManager
 import utils.FileSaver
 import utils.Saver
 import utils.Storage
+import utils.auth.AuthManager
+import utils.auth.EncryptManager
 import utils.database.DBStorageManager
 import utils.database.Database
 import utils.database.DatabaseManager
-import utils.token.TokenManager
-import utils.token.Tokenizer
+import utils.auth.token.TokenManager
+import utils.auth.token.Tokenizer
 import java.security.MessageDigest
 
 val serverModule = module {
@@ -40,12 +42,18 @@ val serverModule = module {
         CommandManager()
     }
 
-    //token
+    //auth
     single {
         MessageDigest.getInstance("SHA-384")
     }
+    single {
+        EncryptManager(encrypter = get(), fileManager = get(), ".key")
+    }
     single<Tokenizer> {
-        TokenManager(encoder = get(), fileManager = get(), ".key")
+        TokenManager(encrypter = get())
+    }
+    single {
+        AuthManager(tokenManager = get(), encrypter = get(), database = get())
     }
 
     // database
@@ -53,7 +61,7 @@ val serverModule = module {
         DBStorageManager(database = get())
     }
     single<Database> {
-        DatabaseManager("pg", "5432", "studs")
+        DatabaseManager("pg", "5432", "studs", fileManager = get())
     }
 
     // server

@@ -14,6 +14,11 @@ import org.koin.core.context.GlobalContext.startKoin
 import org.koin.dsl.module
 import org.koin.test.KoinTest
 import org.koin.test.inject
+import utils.auth.EncryptManager
+import utils.auth.UserStatus
+import utils.auth.token.Content
+import utils.auth.token.Token
+import utils.auth.token.TokenManager
 import java.security.MessageDigest
 import java.util.*
 
@@ -26,8 +31,11 @@ class TokenManagerTest : KoinTest {
             every { m.readFile(".key") } returns "aboba"
             m
         }
-        single { TokenManager(MessageDigest.getInstance("SHA-384"), get(), ".key") }
+        single { TokenManager(EncryptManager(MessageDigest.getInstance("SHA-384"), get(), ".key")) }
     }
+
+    private val content = Content(1, UserStatus.USER)
+
 
     @BeforeAll
     fun setup() {
@@ -39,7 +47,6 @@ class TokenManagerTest : KoinTest {
     @Test
     fun `Untouched token should be ok`() {
         val tokenManager: TokenManager by inject()
-        val content = Content(1, "user")
         val token = tokenManager.createToken(content)
 
         assertTrue(tokenManager.checkToken(token))
@@ -49,7 +56,6 @@ class TokenManagerTest : KoinTest {
     @Test
     fun `Expired token shouldn't be ok`() {
         val tokenManager: TokenManager by inject()
-        val content = Content(1, "user")
         val token = tokenManager.createToken(content, -1)
 
         assertFalse(tokenManager.checkToken(token))
@@ -59,16 +65,11 @@ class TokenManagerTest : KoinTest {
     @Test
     fun `Modified token shouldn't be ok`() {
         val tokenManager: TokenManager by inject()
-        val content = Content(1, "user")
         val token = tokenManager.createToken(content)
 
         val parts = token.toString().split('.').toMutableList()
-        parts[1] = Base64.getEncoder().encodeToString(Json.encodeToString(Content(1, "admin")).toByteArray())
+        parts[1] = Base64.getEncoder().encodeToString(Json.encodeToString(Content(1, UserStatus.ADMIN)).toByteArray())
         val falseToken = Token(parts[0], parts[1], parts[2])
-
-        println(token)
-        println(falseToken)
-
 
         assertFalse(tokenManager.checkToken(falseToken))
     }
@@ -76,7 +77,6 @@ class TokenManagerTest : KoinTest {
     @Test
     fun `Token parse works`() {
         val tokenManager: TokenManager by inject()
-        val content = Content(1, "user")
         val token = tokenManager.createToken(content)
         val str = token.toString()
 

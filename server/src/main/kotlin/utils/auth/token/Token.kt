@@ -1,4 +1,4 @@
-package utils.token
+package utils.auth.token
 
 /**
  * Represents a token for client-server architecture

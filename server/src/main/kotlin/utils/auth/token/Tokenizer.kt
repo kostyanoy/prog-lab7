@@ -1,4 +1,4 @@
-package utils.token
+package utils.auth.token
 
 /**
  * Interface for different token generators
