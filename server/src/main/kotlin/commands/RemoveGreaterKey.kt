@@ -2,6 +2,7 @@ package commands
 
 import ArgumentType
 import CommandResult
+import utils.auth.token.Content
 
 /**
  * The command removes from the collection all items whose key exceeds the specified one.
@@ -13,12 +14,14 @@ class RemoveGreaterKey : UndoableCommand() {
         "remove_greater_key : удалить из коллекции все элементы, ключ которых превышает заданный"
 
     override fun execute(args: Array<Any>): CommandResult {
-        previousPair.clear()
         val userKey = args[0] as Int
+        val content = args[1] as Content
+
+        //previousPair.clear()
         storage.getCollection { userKey < key }
             .forEach {
-                previousPair.add(it.key to it.value)
-                storage.removeKey(it.key)
+                //previousPair.add(it.key to it.value)
+                storage.removeKey(content.userId, it.key)
             }
         return CommandResult.Success("Remove_greater_key")
     }
@@ -26,11 +29,12 @@ class RemoveGreaterKey : UndoableCommand() {
     override fun getArgumentTypes(): Array<ArgumentType> = arrayOf(ArgumentType.INT)
 
     override fun undo(): CommandResult {
-        previousPair.forEach { (key, value) ->
-            storage.insert(key, value!!)
-        }
-        previousPair.clear()
-        return CommandResult.Success("Undo Remove_greater_key")
+        throw UnsupportedOperationException("Эта операция не поддерживается в текущей версии")
+//        previousPair.forEach { (key, value) ->
+//            storage.insert(1, key, value!!)
+//        }
+//        previousPair.clear()
+//        return CommandResult.Success("Undo Remove_greater_key")
     }
 }
 

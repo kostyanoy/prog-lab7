@@ -58,7 +58,7 @@ class DBStorageManager(private val database: Database) : Storage<LinkedHashMap<I
     override fun update(userId: Int, id: Int, element: MusicBand): Boolean = getConnection().use {
         transaction {
             val band = Bands.select { Bands.id eq id }.singleOrNull()
-                ?: throw CommandException("Не существует такого ключа")
+                ?: throw CommandException("Элемент с таким ключом не существует")
             if (band[Bands.userId] != userId) {
                 throw CommandException("Эта банда принадлежит другому пользователю")
             }
@@ -73,7 +73,7 @@ class DBStorageManager(private val database: Database) : Storage<LinkedHashMap<I
         transaction {
             val band = Bands.select { Bands.id eq id }.singleOrNull()
             if (band != null) {
-                throw CommandException("Не существует такого ключа")
+                throw CommandException("Элемент с таким ключом уже существует")
             }
             Bands.insert {
                 element.toInsertStatement(it)

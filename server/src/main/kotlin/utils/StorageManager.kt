@@ -1,6 +1,7 @@
 package utils
 
 import data.MusicBand
+import exceptions.CommandException
 import java.time.LocalDateTime
 
 /**
@@ -25,12 +26,12 @@ class StorageManager : Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand> {
             musicBandCollection[id] = element
             return true
         }
-        return false
+        throw CommandException("Элемент с таким ключом существует")
     }
 
     override fun update(userId: Int, id: Int, element: MusicBand): Boolean {
         if (musicBandCollection[id] == null)
-            return false
+            throw CommandException("Элемент с таким ключом не существует")
         musicBandCollection[id] = element
         return true
     }
@@ -42,7 +43,7 @@ class StorageManager : Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand> {
 
     override fun removeKey(userId: Int, id: Int): Boolean {
         if (musicBandCollection[id] == null)
-            return false
+            throw CommandException("Элемент с таким ключом не существует")
         musicBandCollection.remove(id)
         return true
     }

@@ -12,6 +12,8 @@ import org.koin.test.KoinTest
 import org.koin.test.junit5.KoinTestExtension
 import utils.Storage
 import utils.StorageManager
+import utils.auth.UserStatus
+import utils.auth.token.Content
 
 internal class ReplaceIfLoweTest : KoinTest {
     private val m1 = MusicBand("name1", Coordinates(1.0F, 1.0), 1, 1, "", MusicGenre.HIP_HOP, null, id = 1)
@@ -29,10 +31,10 @@ internal class ReplaceIfLoweTest : KoinTest {
 
     @Test
     fun `Replace MusicBand if user element is lower than current element`() {
-        storage.insert(1, m2)
+        storage.insert(1, 1, m2)
 
         val replaceIfLowerCommand = ReplaceIfLowe()
-        replaceIfLowerCommand.execute(arrayOf(1, m1))
+        replaceIfLowerCommand.execute(arrayOf(1, m1, Content(1, UserStatus.USER)))
 
         assertEquals(1, storage.getCollection { true }.count())
         assertEquals(m1, storage.getCollection { true }[1])
