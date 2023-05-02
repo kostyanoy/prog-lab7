@@ -1,40 +1,40 @@
 import di.serverModule
+import mu.KotlinLogging
 import org.koin.core.context.GlobalContext.startKoin
-import org.apache.log4j.Logger
+import kotlin.concurrent.thread
 
+/**
+ * Main function that starts the application
+ */
 fun main(args: Array<String>) {
-    val logger = Logger.getLogger(ServerApp::class.java)
+    startKoin {
+        modules(serverModule)
+    }
+
+    val logger = KotlinLogging.logger {}
+
     var serverPort = 2229
     if (args.isNotEmpty()) {
         serverPort = args[0].toIntOrNull() ?: serverPort
     }
-    startKoin {
-        modules(serverModule)
-    }
+
+    logger.info { "Выбран порт: $serverPort" }
+
     val server = ServerApp("localhost", serverPort)
-    while (true) {
-        print("connect or exit: ")
-        when (readlnOrNull()) {
-            "connect" -> {
-                server.start()
-                logger.info { "Сервер закрылся" }
-            }
 
-            "exit" -> {
-                server.stop()
-                break
-            }
-
-            "save" -> {
-                server.saveCollection()
-            }
-
-            "load" -> {
-                server.loadCollection()
+    val thread = thread {
+        while (true) {
+            when (readlnOrNull()) {
+                "exit" -> {
+                    server.stop()
+                    logger.info { "Сервер закрылся" }
+                    break
+                }
             }
         }
-
     }
+    server.start()
+    thread.join()
 }
 
 
