@@ -7,20 +7,21 @@ import serialize.FrameSerializer
 import serialize.Serializer
 import utils.*
 import utils.console.ConsoleManager
+import utils.state.AuthState
 
 /**
  * Koin module for the client part
  */
 val clientModule = module {
-    factory<ReaderWriter> {
+    single<ReaderWriter> {
         ConsoleManager()
     }
 
-    factory<Serializer<Frame>> {
+    single<Serializer<Frame>> {
         FrameSerializer()
     }
 
-    factory<Validator> {
+    single<Validator> {
         ValidationManager(interactor = get(), userManager = get())
     }
 
@@ -28,15 +29,15 @@ val clientModule = module {
         CommandManager()
     }
 
-    factory {
+    single {
         FileManager()
     }
 
-    factory {
+    single {
         FrameSerializer()
     }
 
     single<Interactor> {
-        InteractionManager(userManager = get(), fileManager = get(), commandManager = get())
+        InteractionManager(userManager = get(), fileManager = get(), commandManager = get(), AuthState())
     }
 }

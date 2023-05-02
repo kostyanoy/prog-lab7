@@ -12,6 +12,11 @@ interface ReaderWriter {
     fun readLine(): String
 
     /**
+     * Reads a line but doesn't show characters in console
+     */
+    fun readPassword(): String
+
+    /**
      * Shows the message to user. Adds a new line to the end
      *
      * @param text the content of the message

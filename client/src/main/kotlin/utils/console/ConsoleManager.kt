@@ -12,8 +12,14 @@ import java.nio.charset.Charset
 class ConsoleManager : ReaderWriter {
     private val inputStream: InputStream = System.`in`
     private val reader = InputStreamReader(inputStream, Charset.forName("UTF-8"))
-    
+
     override fun readLine(): String = BufferedReader(reader).readLine()
+    override fun readPassword(): String {
+        if (System.console() == null)
+            return readLine()
+        return System.console().readPassword().toString()
+    }
+
     override fun writeLine(text: String) = println(text)
     override fun write(text: String) = print(text)
 

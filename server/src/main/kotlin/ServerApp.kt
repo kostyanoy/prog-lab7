@@ -6,6 +6,8 @@ import serialize.FrameSerializer
 import utils.CommandManager
 import utils.Saver
 import utils.Storage
+import utils.auth.token.Token
+import utils.auth.token.TokenManager
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.SelectionKey
@@ -25,6 +27,7 @@ class ServerApp(
     private val port: Int,
 ) : KoinComponent {
     private val commandManager: CommandManager by inject()
+    private val tokenManager: TokenManager by inject()
     private val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
     private val storage: Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand> by inject()
     private val serializer = FrameSerializer()
@@ -61,7 +64,7 @@ class ServerApp(
                     onConnect(key, selector)
                     //acceptConnection(key, selector)
                 } else if (key.isReadable) {
-                    readRequest(key, selector)
+                    readRequest(key)
                 }
             }
         }
@@ -89,7 +92,7 @@ class ServerApp(
     @param [key] The SelectionKey of the incoming request.
     @param [selector] The Selector instance used for selecting incoming channels and operations.
      */
-    private fun readRequest(key: SelectionKey, selector: Selector) {
+    private fun readRequest(key: SelectionKey) {
         val socketChannel = key.channel() as SocketChannel
         val buffer = ByteBuffer.allocate(1024)
 
@@ -101,6 +104,10 @@ class ServerApp(
             buffer.get(str, buffer.position(), len)
             buffer.flip()
             val request = serializer.deserialize(str.decodeToString())
+            if (request.type == FrameType.EXIT){
+                onDisconnect(key, socketChannel)
+                return
+            }
             val response = clientRequest(request)
             buffer.clear()
             buffer.put(serializer.serialize(response).toByteArray())
@@ -122,29 +129,51 @@ class ServerApp(
     @return the response frame to be sent back to the client
      */
     private fun clientRequest(request: Frame): Frame {
-        return when (request.type) {
+        when (request.type) {
             FrameType.COMMAND_REQUEST -> {
                 val response = Frame(FrameType.COMMAND_RESPONSE)
-                val commandName = request.body["name"] as String
-                val args = request.body["args"] as Array<Any>
-                val command = commandManager.getCommand(commandName)
-                val result = command.execute(args)
+                val result = execute(
+                    request.body["name"] as String,
+                    request.body["args"] as Array<Any>,
+                    request.body["token"] as String
+                )
                 response.setValue("data", result)
-                response
+                return response
             }
 
             FrameType.LIST_OF_COMMANDS_REQUEST -> {
                 val response = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
                 val commands = commandManager.commands.mapValues { it.value.getArgumentTypes() }.toMap()
                 response.setValue("commands", commands)
-                response
+                return response
+            }
+
+            FrameType.AUTHORIZE_REQUEST -> {
+                val response = Frame(FrameType.AUTHORIZE_RESPONSE)
+                val result = execute(
+                    request.body["type"] as String,
+                    arrayOf(request.body["login"] as String, request.body["password"] as String),
+                    ""
+                )
+                response.setValue("data", result)
+                return response
             }
 
             else -> {
-                val response = Frame(FrameType.COMMAND_RESPONSE)
-                response.setValue("data", "Неверный тип запроса")
-                response
+                val response = Frame(FrameType.ERROR)
+                response.setValue("error", "Неверный тип запроса")
+                return response
             }
+        }
+    }
+
+    private fun execute(commandName: String, args: Array<Any>, token: String): CommandResult {
+        val command = commandManager.getCommand(commandName)
+        val content = tokenManager.getContent(Token.parse(token))
+        return try {
+            command.execute(args + content)
+        } catch (e: Exception) {
+            CommandResult.Failure(commandName, e)
         }
     }
 
@@ -163,7 +192,7 @@ class ServerApp(
     }
 
     fun loadCollection() {
-        saver.load().forEach { storage.insert(it.key, it.value) }
+        saver.load().forEach { storage.insert(1, it.key, it.value) }
         logger.info("Коллекция загружена")
     }
 }
