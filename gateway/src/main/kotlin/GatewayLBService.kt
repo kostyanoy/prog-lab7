@@ -12,6 +12,7 @@ class GatewayLBService(
     private val clientPort: Int,
     private val serverPort: Int
 ) : KoinComponent {
+    var running = true
     private val logger = Logger.getLogger(GatewayLBService::class.java)
     private val serializer = FrameSerializer()
     private val clientSelector = Selector.open()
@@ -20,6 +21,7 @@ class GatewayLBService(
     private val serverServerSocketChannel = ServerSocketChannel.open()
     private val servers = mutableListOf<SocketChannel>()
     private var currentServerIndex = 0
+
     init {
         clientServerSocketChannel.socket().bind(InetSocketAddress(clientPort))
         clientServerSocketChannel.configureBlocking(false)
@@ -31,8 +33,8 @@ class GatewayLBService(
     }
 
     fun start() {
-        logger.info("Подключается GatewayLBService")
-        while (true) {
+        logger.info("GatewayLBService стартует")
+        while (running) {
             //клиенты
             if (clientSelector.selectNow() > 0) { // проверяется, есть ли доступные клиенты для подключения
                 val keys = clientSelector.selectedKeys() // получаем ключи, соответствующие доступным клиентам
@@ -45,8 +47,8 @@ class GatewayLBService(
                         val clientChannel = key.channel() as SocketChannel // получаем канал клиента
                         try {
                             val request = receiveRequest(clientChannel) // получаем запрос от клиента
-                            val response = routeRequest(request) // маршрутизируем запрос
-                            sendResponse(clientChannel, response) // отправляем ответ клиенту
+                            val response = request?.let { routeRequest(it) } // маршрутизируем запрос
+                            response?.let { sendResponse(clientChannel, it) } // отправляем ответ клиенту
                         } catch (e: Exception) {
                             logger.error("Ошибка обработки запроса от клиента", e)
                         } finally {
@@ -70,9 +72,14 @@ class GatewayLBService(
                     iterator.remove()
                 }
             }
-
         }
     }
+    fun stop() {
+        running = false
+        clientSelector.wakeup()
+        serverSelector.wakeup()
+    }
+
     // подлючение к клиенту
     private fun connectToClient(key: SelectionKey) {
         val serverChannel = key.channel() as ServerSocketChannel
@@ -80,6 +87,7 @@ class GatewayLBService(
         clientChannel.configureBlocking(false)
         clientChannel.register(clientSelector, SelectionKey.OP_READ)
     }
+
     // подлючение к серверу
     private fun connectToServer(key: SelectionKey) {
         val serverChannel = SocketChannel.open()
@@ -88,24 +96,33 @@ class GatewayLBService(
         serverChannel.register(serverSelector, SelectionKey.OP_CONNECT)
         servers.add(serverChannel) // добавляем канал сервера в список доступных серверов
     }
+
     // чтение запроса от клиента
-    private fun receiveRequest(channel: SocketChannel): ByteArray {
+    private fun receiveRequest(channel: SocketChannel): ByteArray? {
         val buffer = ByteBuffer.allocate(1024)
-        channel.read(buffer)
-        buffer.flip()
-        val len = buffer.limit() - buffer.position()
-        val bytes = ByteArray(len)
-        buffer.get(bytes, buffer.position(), len)
-        return bytes
-    }
+            channel.read(buffer)
+            buffer.flip()
+            val len = buffer.limit() - buffer.position()
+            val str = ByteArray(len)
+            buffer.get(str, buffer.position(), len)
+            val request = serializer.deserialize(str.decodeToString())
+            buffer.clear()
+            buffer.put('\n'.code.toByte())
+            buffer.flip()
+            channel.write(buffer)
+            return serializer.serialize(request).toByteArray()
+        }
+
     // чтение запросов от сервера
     private fun readServerRequest(key: SelectionKey, clientSelector: Selector, serverSelector: Selector) {
         val clientChannel = key.attachment() as SocketChannel
         val serverChannel = key.channel() as SocketChannel
         try {
             val request = receiveRequest(serverChannel)// читаем запрос от сервера
-            val response = routeRequest(request) // обрабатываем запрос и получаем ответ
-            sendResponse(clientChannel, response)// отправляем ответ клиенту
+            val response = request?.let { routeRequest(it) } // обрабатываем запрос и получаем ответ
+            if (response != null) {
+                sendResponse(clientChannel, response)
+            }// отправляем ответ клиенту
             key.interestOps(SelectionKey.OP_WRITE)
         } catch (e: Exception) {
             logger.error("Ошибка обработки запроса от сервера", e)
@@ -113,8 +130,9 @@ class GatewayLBService(
             serverChannel.close()
         }
     }
+
     // маршутизируем запросы к серверу
-    private fun routeRequest(request: ByteArray): ByteArray {
+    private fun routeRequest(request: ByteArray): ByteArray? {
         if (servers.isEmpty()) {
             throw IllegalStateException("Нет доступных серверов")
         }
@@ -123,7 +141,8 @@ class GatewayLBService(
         server.write(ByteBuffer.wrap(request))// отправляем запрос на сервер
         return receiveRequest(server)// получаем ответ от сервера
     }
-// отправка ответов клиенту
+
+    // отправка ответов клиенту
     private fun sendResponse(clientChannel: SocketChannel, response: ByteArray) {
         val buffer = ByteBuffer.wrap(response)
         while (buffer.hasRemaining()) {// пока в буфере есть данные

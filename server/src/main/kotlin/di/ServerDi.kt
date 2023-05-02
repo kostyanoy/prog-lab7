@@ -1,12 +1,10 @@
 package di
 import FileManager
-import ServerApp
 import commands.CommandHistory
 import data.MusicBand
 import org.koin.dsl.module
 import serialize.Serializer
 import utils.*
-import utils.StorageManager
 import serialize.SerializeManager
 
 val serverModule = module {
@@ -29,5 +27,4 @@ val serverModule = module {
     single {
         CommandManager()
     }
-    single { ServerApp(2228) }
  }

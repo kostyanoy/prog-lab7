@@ -8,7 +8,7 @@ import utils.*
 import utils.StorageManager
 import serialize.SerializeManager
 
-val serviceModule = module {
+val gatewayModule = module {
     factory<Saver<LinkedHashMap<Int, MusicBand>>> {
         FileSaver("save.txt", serializer = get(), fileManager = get())
     }

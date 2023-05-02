@@ -1,9 +1,7 @@
 import data.MusicBand
-import kotlinx.coroutines.coroutineScope
 import org.apache.log4j.Logger
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
-import org.koin.java.KoinJavaComponent.inject
 import serialize.FrameSerializer
 import utils.CommandManager
 import utils.Saver
@@ -13,19 +11,22 @@ import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
 import java.nio.channels.SocketChannel
+import java.util.concurrent.Executors
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 class ServerApp(
     private val gatewayAddress: String,
-    private val gatewayPort: Int,
-    private val port: Int
+    private val gatewayPort: Int
 ) : KoinComponent {
+    private val commandManager by inject<CommandManager>()
     private val frameSerializer by inject<FrameSerializer>()
     private val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
     private val storage: Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand> by inject()
     private val serializer = FrameSerializer()
     private val logger = Logger.getLogger(ServerApp::class.java)
     private lateinit var channel: SocketChannel
-
+    val executor = Executors.newFixedThreadPool(10) // создаем пул потоков
+    val lock = ReentrantReadWriteLock() //синхронизации доступа к коллекции
     //1 блок
     //подключается к GatewayLBService как клиент
     fun start() {
@@ -47,6 +48,7 @@ class ServerApp(
         }
     }
     //1 блок
+    // отправляем запрос GatewayLBService
     private fun sendRequest(request: Frame): Frame {
         val buffer = ByteBuffer.allocate(1024)
         buffer.put(serializer.serialize(request).toByteArray())
@@ -54,14 +56,14 @@ class ServerApp(
         buffer.flip()
         channel.write(buffer)
         buffer.clear()
-        channel.read(buffer)
+        channel.read(buffer)// читаем ответ от GatewayLBService
         buffer.flip()
         val len = buffer.limit() - buffer.position()
         val str = ByteArray(len)
         buffer.get(str, buffer.position(), len)
         return serializer.deserialize(str.decodeToString())
     }
-
+//читаем ответ от GatewayLBService
     fun receiveFromGatewayLBService(): Frame {
         val array = ArrayList<Byte>()
         var char = channel.socket().getInputStream().read().toChar()
@@ -76,7 +78,7 @@ class ServerApp(
     }
 
     //3 блок
-    //получает распакованный ключ
+    //ответ сервера
     private fun serverRequest(request: Frame): Frame {
         return when (request.type) {
             FrameType.COMMAND_REQUEST -> {
@@ -88,7 +90,6 @@ class ServerApp(
                 response.setValue("data", result)
                 response
             }
-
 
             FrameType.LIST_OF_COMMANDS_REQUEST -> {
                 val response = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
@@ -117,13 +118,13 @@ class ServerApp(
 
 
     //неизменяемый блок
-    private fun saveCollection() {
+    fun saveCollection() {
         val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
         saver.save(storage.getCollection { true })
         logger.info("Коллекция сохранена")
     }
 
-    private fun loadCollection() {
+    fun loadCollection() {
         val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
         saver.load().forEach { storage.insert(it.key, it.value) }
         logger.info("Коллекция загружена")
