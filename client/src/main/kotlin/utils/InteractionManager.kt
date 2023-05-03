@@ -71,7 +71,7 @@ class InteractionManager(
     }
 
     override fun interact(text: String) {
-        val input = text.trim().split(" ")
+        val input = text.split(" ")
         if (input.count() > 2) {
             userManager.writeLine("Слишком много аргументов в строке")
             return

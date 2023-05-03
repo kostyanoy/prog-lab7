@@ -1,19 +1,22 @@
-import data.MusicBand
-import org.apache.log4j.Logger
+import mu.KotlinLogging
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import serialize.FrameSerializer
 import utils.CommandManager
-import utils.Saver
-import utils.Storage
+import utils.auth.UserStatus
+import utils.auth.token.Content
 import utils.auth.token.Token
-import utils.auth.token.TokenManager
+import utils.auth.token.Tokenizer
+import utils.database.Database
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
 import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
+import kotlin.math.min
 
 /**
 
@@ -27,11 +30,9 @@ class ServerApp(
     private val port: Int,
 ) : KoinComponent {
     private val commandManager: CommandManager by inject()
-    private val tokenManager: TokenManager by inject()
-    private val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
-    private val storage: Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand> by inject()
+    private val tokenManager: Tokenizer by inject()
     private val serializer = FrameSerializer()
-    private val logger = Logger.getLogger(ServerApp::class.java)
+    private val logger = KotlinLogging.logger {}
     var running = true
     private var selector: Selector = Selector.open()
     private lateinit var serverChannel: ServerSocketChannel
@@ -104,18 +105,36 @@ class ServerApp(
             buffer.get(str, buffer.position(), len)
             buffer.flip()
             val request = serializer.deserialize(str.decodeToString())
-            if (request.type == FrameType.EXIT){
+            if (request.type == FrameType.EXIT) {
                 onDisconnect(key, socketChannel)
                 return
             }
             val response = clientRequest(request)
-            buffer.clear()
-            buffer.put(serializer.serialize(response).toByteArray())
-            buffer.put('\n'.code.toByte())
-            buffer.flip()
-            socketChannel.write(buffer)
-        } catch (e: Exception) {
-            logger.error(e.message)
+            val serializedResponse = (serializer.serialize(response) + "\n").toByteArray()
+            val responseLength = serializedResponse.size
+            var offset = 0
+            while (offset < responseLength) {
+                val remaining = responseLength - offset
+                val chunkSize = min(remaining, buffer.remaining())
+                if (chunkSize == 0) {
+                    break
+                }
+                buffer.put(serializedResponse, offset, chunkSize)
+                offset += chunkSize
+                buffer.flip()
+                socketChannel.write(buffer)
+                buffer.flip()
+            }
+//            buffer.clear()
+//            buffer.put(serializer.serialize(response).toByteArray())
+//            buffer.put('\n'.code.toByte())
+//            buffer.flip()
+//            socketChannel.write(buffer)
+        } catch (e: Throwable) {
+            val sw = StringWriter()
+            val pw = PrintWriter(sw)
+            e.printStackTrace(pw)
+            logger.error(e.message + sw.toString())
             onDisconnect(key, socketChannel)
 //            key.cancel()
 //            socketChannel.close()
@@ -133,9 +152,7 @@ class ServerApp(
             FrameType.COMMAND_REQUEST -> {
                 val response = Frame(FrameType.COMMAND_RESPONSE)
                 val result = execute(
-                    request.body["name"] as String,
-                    request.body["args"] as Array<Any>,
-                    request.body["token"] as String
+                    request.body["name"] as String, request.body["args"] as Array<Any>, request.body["token"] as String
                 )
                 response.setValue("data", result)
                 return response
@@ -169,10 +186,14 @@ class ServerApp(
 
     private fun execute(commandName: String, args: Array<Any>, token: String): CommandResult {
         val command = commandManager.getCommand(commandName)
-        val content = tokenManager.getContent(Token.parse(token))
+        val content = if (token.isBlank()) Content(-1, UserStatus.USER) else tokenManager.getContent(Token.parse(token))
         return try {
             command.execute(args + content)
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
+            val sw = StringWriter()
+            val pw = PrintWriter(sw)
+            e.printStackTrace(pw)
+            logger.error(e.message + sw.toString())
             CommandResult.Failure(commandName, e)
         }
     }
@@ -185,14 +206,8 @@ class ServerApp(
         selector.wakeup()
     }
 
-    fun saveCollection() {
-        val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
-        saver.save(storage.getCollection { true })
-        logger.info("Коллекция сохранена")
-    }
-
-    fun loadCollection() {
-        saver.load().forEach { storage.insert(1, it.key, it.value) }
-        logger.info("Коллекция загружена")
+    fun updateTables() {
+        val database: Database by inject()
+        database.updateTables()
     }
 }

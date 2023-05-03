@@ -37,12 +37,6 @@ class DatabaseManager(
         dataSource?.close()
     }
 
-//    fun updateTables(conn: Connection) {
-//        transaction(conn) {
-//            SchemaUtils.createMissingTablesAndColumns(Users, Bands, Albums, Keys)
-//        }
-//    }
-
     /**
      * Creates [HikariDataSource] with the config parameters if there is none
      *

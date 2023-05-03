@@ -7,7 +7,7 @@ import org.jetbrains.exposed.sql.select
 import org.jetbrains.exposed.sql.transactions.transaction
 import utils.auth.token.Content
 import utils.auth.token.Token
-import utils.auth.token.TokenManager
+import utils.auth.token.Tokenizer
 import utils.database.Database
 import utils.database.tables.Users
 import java.sql.Connection
@@ -21,7 +21,7 @@ import java.sql.SQLException
  * @param database gives connections to database
  */
 class AuthManager(
-    private val tokenManager: TokenManager,
+    private val tokenManager: Tokenizer,
     private val encrypter: EncryptManager,
     private val database: Database
 ) {

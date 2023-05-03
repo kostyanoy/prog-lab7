@@ -40,22 +40,14 @@ fun main(args: Array<String>) {
 
     val thread = thread {
         while (true) {
-            val command = readlnOrNull()
-            when (command) {
+            when (readlnOrNull()) {
                 "exit" -> {
                     server.stop()
                     break
                 }
 
-                "save" -> {
-                    server.saveCollection()
-                }
-
-                "load" -> {
-                    server.loadCollection()
-                }
+                "update" -> server.updateTables()
             }
-
         }
     }
     startKoin {
@@ -63,4 +55,9 @@ fun main(args: Array<String>) {
     }
     server.start()
     thread.join()
+//    startKoin { modules(serverModule) }
+//    val a = object : KoinComponent {
+//        val a: AuthManager by inject()
+//    }
+//    a.a.login("", "")
 }

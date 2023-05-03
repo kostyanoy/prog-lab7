@@ -8,10 +8,6 @@ import Frame
 class ExitState : InteractionState() {
     override fun start() {
         interactor.getClient().sendFrame(Frame(FrameType.EXIT))
-        exitState()
-    }
-
-    override fun exitState() {
         stop()
     }
 }

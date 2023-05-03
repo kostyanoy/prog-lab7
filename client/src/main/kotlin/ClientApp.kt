@@ -43,10 +43,8 @@ class ClientApp(private val serverAddress: String, private val serverPort: Int) 
      * Closes the connection
      */
     fun stop() {
-        if (channel.isOpen) {
-            channel.close()
-            logger.info { "Канал закрыт" }
-        }
+        channel.close()
+        logger.info { "Канал закрыт" }
     }
 
     /**

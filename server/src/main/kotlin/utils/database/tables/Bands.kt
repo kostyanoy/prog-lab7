@@ -8,8 +8,18 @@ import org.jetbrains.exposed.sql.javatime.timestamp
  * The representation of the users table in the database
  *
  * All properties represent expanded MusicBand's properties
+ * @property name name of band
+ * @property x first coordinate
+ * @property y second coordinate
+ * @property numberOfParticipants number of musicians in the band
+ * @property albumsCount number of albums published by band
+ * @property description self-explainable
+ * @property genre the main genre of band
+ * @property albumName name of best album
+ * @property albumLength length of best album
  * @property creationTime saves ZonedDateTime as Instant
  * @property zone contain id of the Zone
+ * @property bandId id of the band
  * @property userId references to [Users] table
  */
 object Bands : IntIdTable("bands") {

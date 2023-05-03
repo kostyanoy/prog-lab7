@@ -50,7 +50,7 @@ class FileInteractor(
      * @param text the string with the command
      */
     override fun interact(text: String) {
-        val input = text.trim().split(" ")
+        val input = text.split(" ")
         if (input.count() > 2) {
             throw CommandFileException("Слишком много аргументов в строке")
         }

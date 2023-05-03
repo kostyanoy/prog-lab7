@@ -7,6 +7,7 @@ import org.jetbrains.exposed.sql.SqlExpressionBuilder.eq
 import org.jetbrains.exposed.sql.transactions.transaction
 import utils.Storage
 import utils.database.tables.Bands
+import utils.database.tables.Users
 import java.sql.Connection
 import java.sql.SQLException
 import java.time.LocalDateTime
@@ -63,7 +64,7 @@ class DBStorageManager(private val database: Database) : Storage<LinkedHashMap<I
                 throw CommandException("Эта банда принадлежит другому пользователю")
             }
             Bands.update({ Bands.id eq id }) {
-                element.toUpdateStatement(it)
+                element.toStatement(it)
             }
         }
         true
@@ -76,7 +77,8 @@ class DBStorageManager(private val database: Database) : Storage<LinkedHashMap<I
                 throw CommandException("Элемент с таким ключом уже существует")
             }
             Bands.insert {
-                element.toInsertStatement(it)
+                element.toStatement(it)
+                it[Bands.id] = id
                 it[Bands.userId] = userId
             }
         }
@@ -86,7 +88,7 @@ class DBStorageManager(private val database: Database) : Storage<LinkedHashMap<I
     private fun updateCollection() {
         val bands = LinkedHashMap<Int, MusicBand>()
         transaction {
-            Bands.selectAll().map {
+            Bands.innerJoin(Users).selectAll().map {
                 bands[it[Bands.id].value] = it.toMusicBand()
             }
         }
