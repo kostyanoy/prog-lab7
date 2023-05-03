@@ -22,8 +22,6 @@ class GatewayLBService(
     private val serverServerSocketChannel = ServerSocketChannel.open()
     private val servers = mutableListOf<SocketChannel>()
     private var currentServerIndex = 0
-
-    //инициализация шлюзовых сокетов
     init {
         clientServerSocketChannel.socket().bind(InetSocketAddress(clientPort))
         clientServerSocketChannel.configureBlocking(false)
@@ -37,9 +35,8 @@ class GatewayLBService(
     fun start() {
         logger.info("GatewayLBService стартует")
         while (running) {
-            //клиенты
-            if (clientSelector.selectNow() > 0) { // проверяется, есть ли доступные клиенты для подключения
-                val keys = clientSelector.selectedKeys() // получаем ключи, соответствующие доступным клиентам
+            if (clientSelector.selectNow() > 0) {
+                val keys = clientSelector.selectedKeys()
                 val iterator = keys.iterator()
                 while (iterator.hasNext()) {
                     val key = iterator.next()
@@ -51,8 +48,7 @@ class GatewayLBService(
                     iterator.remove()
                 }
             }
-            //серверы
-            if (serverSelector.selectNow() > 0) { // проверяем, есть ли доступные серверы для подключения
+            if (serverSelector.selectNow() > 0) {
                 val keys = serverSelector.selectedKeys()
                 val iterator = keys.iterator()
                 while (iterator.hasNext()) {
@@ -74,7 +70,6 @@ class GatewayLBService(
         serverSelector.wakeup()
     }
 
-    // подлючение к клиенту
     private fun connectToClient(key: SelectionKey) {
         val clientChannel = clientServerSocketChannel.accept()
         clientChannel.configureBlocking(false)
@@ -82,42 +77,39 @@ class GatewayLBService(
         logger.info { "Подключился клиент: ${clientChannel.remoteAddress}" }
     }
 
-    // подлючение к серверу
     private fun connectToServer(key: SelectionKey) {
-        val serverChannel = serverServerSocketChannel.accept() // создаем новый канал для подключения к серверу
-        serverChannel.configureBlocking(false) // устанавливаем неблокирующий режим
+        val serverChannel = serverServerSocketChannel.accept()
+        serverChannel.configureBlocking(false)
         serverChannel.register(
             serverSelector,
             SelectionKey.OP_READ,
             SelectionKey.OP_WRITE
-        ) // регистрируем канал в селекторе серверов
-        servers.add(serverChannel) // добавляем канал в список серверов
+        )
+        servers.add(serverChannel)
         logger.info { "Подключился сервер: ${serverChannel.remoteAddress}. Доступно серверов: ${servers.count()}" }
     }
 
-    //обработка запроса сервера
     private fun handleClientRequest(key: SelectionKey) {
-        val clientChannel = key.channel() as SocketChannel // получаем канал клиента
+        val clientChannel = key.channel() as SocketChannel
         try {
-            val request = receiveRequest(clientChannel) // получаем запрос от клиента
+            val request = receiveRequest(clientChannel)
             if (request.type == FrameType.EXIT) {
                 logger.info { "Отключен клиент ${clientChannel.remoteAddress}" }
                 clientChannel.close()
                 return
             }
-            val response = routeRequest(request) // маршрутизируем запрос
-            sendResponse(clientChannel, response) // отправляем ответ клиенту
+            val response = routeRequest(request)
+            sendResponse(clientChannel, response)
         } catch (e: Exception) {
             logger.error("Ошибка обработки запроса от клиента", e)
             clientChannel.close()
         }
     }
 
-    //обработка запроса клиента
     private fun handleServerRequest(key: SelectionKey) {
         val serverChannel = key.channel() as SocketChannel
         try {
-            val request = receiveRequest(serverChannel) // читаем запрос от сервера
+            val request = receiveRequest(serverChannel)
             if (request.type == FrameType.EXIT) {
                 servers.remove(serverChannel)
                 logger.info { "Отключен сервер ${serverChannel.remoteAddress}" }
@@ -126,11 +118,9 @@ class GatewayLBService(
             }
         } catch (e: Exception) {
             logger.error("Показалось", e)
-            //serverChannel.close() - иногда видит чужие ответы
         }
     }
 
-    // чтение запроса
     private fun receiveRequest(channel: SocketChannel): Frame {
         val buffer = ByteBuffer.allocate(1024)
         var tries = 0
@@ -151,7 +141,6 @@ class GatewayLBService(
         return request
     }
 
-    // маршутизируем запросы к серверу
     private fun routeRequest(request: Frame): Frame {
         logger.info { "Доступно серверов: ${servers.count()}" }
         if (servers.isEmpty()) {
@@ -159,19 +148,17 @@ class GatewayLBService(
         }
         val server = servers[nextIndex()]
         val buffer = ByteBuffer.wrap((serializer.serialize(request) + "\n").toByteArray())
-        server.write(buffer)// отправляем запрос на сервер
+        server.write(buffer)
         logger.info { "Маршрутизирован Frame к ${server.remoteAddress}" }
-        return receiveRequest(server)// получаем ответ от сервера
+        return receiveRequest(server)
     }
 
-    // отправка ответов
     private fun sendResponse(clientChannel: SocketChannel, response: Frame) {
         val buffer = ByteBuffer.wrap((serializer.serialize(response) + '\n').toByteArray())
         clientChannel.write(buffer)// отправляем данные в канал клиента
         logger.info { "Отправлен ответ на клиент ${clientChannel.remoteAddress}" }
     }
 
-    // генерация индекса следующего сервера
     private fun nextIndex(): Int {
         if (servers.isEmpty())
             currentServerIndex = 0

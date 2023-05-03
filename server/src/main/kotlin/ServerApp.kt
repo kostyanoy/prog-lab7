@@ -20,15 +20,10 @@ class ServerApp(
     private val frameSerializer by inject<Serializer<Frame>>()
     private var isActive = true
 
-    //    private val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
-//    private val storage: Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand> by inject()
     private val logger = KotlinLogging.logger {}
     private lateinit var channel: SocketChannel
-    val executor = Executors.newFixedThreadPool(10) // создаем пул потоков
-    val lock = ReentrantReadWriteLock() //синхронизации доступа к коллекции
-
-    //1 блок
-    //подключается к GatewayLBService как клиент
+    private val executor = Executors.newFixedThreadPool(10)
+    private val lock = ReentrantReadWriteLock()
     fun start() {
         try {
             channel = SocketChannel.open()
@@ -60,24 +55,6 @@ class ServerApp(
             logger.info { "Канал закрыт" }
         }
     }
-
-    //1 блок
-    // отправляем запрос GatewayLBService
-//    private fun sendRequest(request: Frame): Frame {
-//        val buffer = ByteBuffer.allocate(1024)
-//        buffer.put(frameSerializer.serialize(request).toByteArray())
-//        buffer.put('\n'.code.toByte())
-//        buffer.flip()
-//        channel.write(buffer)
-//        buffer.clear()
-//        channel.read(buffer)// читаем ответ от GatewayLBService
-//        buffer.flip()
-//        val len = buffer.limit() - buffer.position()
-//        val str = ByteArray(len)
-//        buffer.get(str, buffer.position(), len)
-//        return frameSerializer.deserialize(str.decodeToString())
-//    }
-//читаем ответ от GatewayLBService
     private fun receiveFromGatewayLBService(): Frame {
         val array = ArrayList<Byte>()
         logger.info { "Ожидаем запроса..." }
@@ -92,8 +69,6 @@ class ServerApp(
         return frame
     }
 
-    //3 блок
-    //ответ сервера
     private fun serverRequest(request: Frame): Frame {
         return when (request.type) {
             FrameType.COMMAND_REQUEST -> {
@@ -121,7 +96,6 @@ class ServerApp(
         }
     }
 
-    //кидает ответ глбс
     private fun sendResponse(response: Frame) {
         val buffer = ByteBuffer.allocate(1024)
         buffer.put(frameSerializer.serialize(response).toByteArray())
@@ -131,20 +105,4 @@ class ServerApp(
         buffer.clear()
         logger.info { "Отправлен Frame ${response.type}" }
     }
-    //3 блок
-
-
-    //неизменяемый блок
-//    fun saveCollection() {
-//        val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
-//        saver.save(storage.getCollection { true })
-//        logger.info("Коллекция сохранена")
-//    }
-//
-//    fun loadCollection() {
-//        val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
-//        saver.load().forEach { storage.insert(it.key, it.value) }
-//        logger.info("Коллекция загружена")
-//    }
-    //неизменяемый блок
 }
