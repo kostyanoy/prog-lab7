@@ -1,11 +1,9 @@
-import data.MusicBand
-import org.apache.log4j.Logger
+import mu.KotlinLogging
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
-import serialize.FrameSerializer
+import serialize.Serializer
 import utils.CommandManager
-import utils.Saver
-import utils.Storage
+import java.io.IOException
 import java.net.ConnectException
 import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
@@ -19,14 +17,16 @@ class ServerApp(
     private val gatewayPort: Int
 ) : KoinComponent {
     private val commandManager by inject<CommandManager>()
-    private val frameSerializer by inject<FrameSerializer>()
-    private val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
-    private val storage: Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand> by inject()
-    private val serializer = FrameSerializer()
-    private val logger = Logger.getLogger(ServerApp::class.java)
+    private val frameSerializer by inject<Serializer<Frame>>()
+    private var isActive = true
+
+    //    private val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
+//    private val storage: Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand> by inject()
+    private val logger = KotlinLogging.logger {}
     private lateinit var channel: SocketChannel
     val executor = Executors.newFixedThreadPool(10) // создаем пул потоков
     val lock = ReentrantReadWriteLock() //синхронизации доступа к коллекции
+
     //1 блок
     //подключается к GatewayLBService как клиент
     fun start() {
@@ -34,6 +34,18 @@ class ServerApp(
             channel = SocketChannel.open()
             channel.socket().connect(InetSocketAddress(gatewayAddress, gatewayPort), 5000)
             logger.info { "Подключено к  GatewayLBService: $gatewayAddress:$gatewayPort" }
+            while (isActive) {
+                try {
+                    val request = receiveFromGatewayLBService()
+                    val response = serverRequest(request)
+                    sendResponse(response)
+                } catch (e: IOException) {
+                    logger.error { e }
+                    channel.close()
+                    isActive = false
+                }
+
+            }
         } catch (e: SocketTimeoutException) {
             logger.info { "GatewayLBService не отвечает (${e.message})" }
         } catch (e: ConnectException) {
@@ -43,33 +55,36 @@ class ServerApp(
 
     fun stop() {
         if (channel.isOpen) {
+            sendResponse(Frame(FrameType.EXIT))
             channel.close()
             logger.info { "Канал закрыт" }
         }
     }
+
     //1 блок
     // отправляем запрос GatewayLBService
-    private fun sendRequest(request: Frame): Frame {
-        val buffer = ByteBuffer.allocate(1024)
-        buffer.put(serializer.serialize(request).toByteArray())
-        buffer.put('\n'.code.toByte())
-        buffer.flip()
-        channel.write(buffer)
-        buffer.clear()
-        channel.read(buffer)// читаем ответ от GatewayLBService
-        buffer.flip()
-        val len = buffer.limit() - buffer.position()
-        val str = ByteArray(len)
-        buffer.get(str, buffer.position(), len)
-        return serializer.deserialize(str.decodeToString())
-    }
+//    private fun sendRequest(request: Frame): Frame {
+//        val buffer = ByteBuffer.allocate(1024)
+//        buffer.put(frameSerializer.serialize(request).toByteArray())
+//        buffer.put('\n'.code.toByte())
+//        buffer.flip()
+//        channel.write(buffer)
+//        buffer.clear()
+//        channel.read(buffer)// читаем ответ от GatewayLBService
+//        buffer.flip()
+//        val len = buffer.limit() - buffer.position()
+//        val str = ByteArray(len)
+//        buffer.get(str, buffer.position(), len)
+//        return frameSerializer.deserialize(str.decodeToString())
+//    }
 //читаем ответ от GatewayLBService
-    fun receiveFromGatewayLBService(): Frame {
+    private fun receiveFromGatewayLBService(): Frame {
         val array = ArrayList<Byte>()
-        var char = channel.socket().getInputStream().read().toChar()
-        while (char != '\n') {
+        logger.info { "Ожидаем запроса..." }
+        var char = channel.socket().getInputStream().read()
+        while (char.toChar() != '\n') {
             array.add(char.toByte())
-            char = channel.socket().getInputStream().read().toChar()
+            char = channel.socket().getInputStream().read()
         }
         val str = String(array.toByteArray())
         val frame = frameSerializer.deserialize(str)
@@ -105,29 +120,31 @@ class ServerApp(
             }
         }
     }
+
     //кидает ответ глбс
-    private fun sendResponse(socketChannel: SocketChannel, response: Frame) {
+    private fun sendResponse(response: Frame) {
         val buffer = ByteBuffer.allocate(1024)
-        buffer.put(serializer.serialize(response).toByteArray())
+        buffer.put(frameSerializer.serialize(response).toByteArray())
         buffer.put('\n'.code.toByte())
         buffer.flip()
-        socketChannel.write(buffer)
+        channel.write(buffer)
         buffer.clear()
+        logger.info { "Отправлен Frame ${response.type}" }
     }
     //3 блок
 
 
     //неизменяемый блок
-    fun saveCollection() {
-        val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
-        saver.save(storage.getCollection { true })
-        logger.info("Коллекция сохранена")
-    }
-
-    fun loadCollection() {
-        val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
-        saver.load().forEach { storage.insert(it.key, it.value) }
-        logger.info("Коллекция загружена")
-    }
+//    fun saveCollection() {
+//        val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
+//        saver.save(storage.getCollection { true })
+//        logger.info("Коллекция сохранена")
+//    }
+//
+//    fun loadCollection() {
+//        val saver: Saver<LinkedHashMap<Int, MusicBand>> by inject()
+//        saver.load().forEach { storage.insert(it.key, it.value) }
+//        logger.info("Коллекция загружена")
+//    }
     //неизменяемый блок
 }

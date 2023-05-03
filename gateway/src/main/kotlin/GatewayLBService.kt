@@ -1,3 +1,4 @@
+import mu.KotlinLogging
 import org.koin.core.component.KoinComponent
 import serialize.FrameSerializer
 import java.net.InetSocketAddress
@@ -6,14 +7,14 @@ import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
 import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
-import org.apache.log4j.Logger
+import java.util.concurrent.TimeoutException
 
 class GatewayLBService(
     private val clientPort: Int,
     private val serverPort: Int
 ) : KoinComponent {
     var running = true
-    private val logger = Logger.getLogger(GatewayLBService::class.java)
+    private val logger = KotlinLogging.logger {}
     private val serializer = FrameSerializer()
     private val clientSelector = Selector.open()
     private val serverSelector = Selector.open()
@@ -22,6 +23,7 @@ class GatewayLBService(
     private val servers = mutableListOf<SocketChannel>()
     private var currentServerIndex = 0
 
+    //инициализация шлюзовых сокетов
     init {
         clientServerSocketChannel.socket().bind(InetSocketAddress(clientPort))
         clientServerSocketChannel.configureBlocking(false)
@@ -44,16 +46,7 @@ class GatewayLBService(
                     if (key.isAcceptable) {
                         connectToClient(key)
                     } else if (key.isReadable) {
-                        val clientChannel = key.channel() as SocketChannel // получаем канал клиента
-                        try {
-                            val request = receiveRequest(clientChannel) // получаем запрос от клиента
-                            val response = request?.let { routeRequest(it) } // маршрутизируем запрос
-                            response?.let { sendResponse(clientChannel, it) } // отправляем ответ клиенту
-                        } catch (e: Exception) {
-                            logger.error("Ошибка обработки запроса от клиента", e)
-                        } finally {
-                            clientChannel.close()
-                        }
+                        handleClientRequest(key)
                     }
                     iterator.remove()
                 }
@@ -67,13 +60,14 @@ class GatewayLBService(
                     if (key.isAcceptable) {
                         connectToServer(key)
                     } else if (key.isReadable) {
-                        readServerRequest(key, clientSelector, serverSelector) // читаем запрос от сервера
+                        handleServerRequest(key)
                     }
                     iterator.remove()
                 }
             }
         }
     }
+
     fun stop() {
         running = false
         clientSelector.wakeup()
@@ -82,71 +76,107 @@ class GatewayLBService(
 
     // подлючение к клиенту
     private fun connectToClient(key: SelectionKey) {
-        val serverChannel = key.channel() as ServerSocketChannel
-        val clientChannel = serverChannel.accept()
+        val clientChannel = clientServerSocketChannel.accept()
         clientChannel.configureBlocking(false)
-        clientChannel.register(clientSelector, SelectionKey.OP_READ)
+        clientChannel.register(clientSelector, SelectionKey.OP_READ, SelectionKey.OP_WRITE)
+        logger.info { "Подключился клиент: ${clientChannel.remoteAddress}" }
     }
 
     // подлючение к серверу
     private fun connectToServer(key: SelectionKey) {
-        val serverChannel = SocketChannel.open()
-        serverChannel.configureBlocking(false)
-        serverChannel.connect(InetSocketAddress("localhost", serverPort))
-        serverChannel.register(serverSelector, SelectionKey.OP_CONNECT)
-        servers.add(serverChannel) // добавляем канал сервера в список доступных серверов
+        val serverChannel = serverServerSocketChannel.accept() // создаем новый канал для подключения к серверу
+        serverChannel.configureBlocking(false) // устанавливаем неблокирующий режим
+        serverChannel.register(
+            serverSelector,
+            SelectionKey.OP_READ,
+            SelectionKey.OP_WRITE
+        ) // регистрируем канал в селекторе серверов
+        servers.add(serverChannel) // добавляем канал в список серверов
+        logger.info { "Подключился сервер: ${serverChannel.remoteAddress}. Доступно серверов: ${servers.count()}" }
     }
 
-    // чтение запроса от клиента
-    private fun receiveRequest(channel: SocketChannel): ByteArray? {
-        val buffer = ByteBuffer.allocate(1024)
-            channel.read(buffer)
-            buffer.flip()
-            val len = buffer.limit() - buffer.position()
-            val str = ByteArray(len)
-            buffer.get(str, buffer.position(), len)
-            val request = serializer.deserialize(str.decodeToString())
-            buffer.clear()
-            buffer.put('\n'.code.toByte())
-            buffer.flip()
-            channel.write(buffer)
-            return serializer.serialize(request).toByteArray()
+    //обработка запроса сервера
+    private fun handleClientRequest(key: SelectionKey) {
+        val clientChannel = key.channel() as SocketChannel // получаем канал клиента
+        try {
+            val request = receiveRequest(clientChannel) // получаем запрос от клиента
+            if (request.type == FrameType.EXIT) {
+                logger.info { "Отключен клиент ${clientChannel.remoteAddress}" }
+                clientChannel.close()
+                return
+            }
+            val response = routeRequest(request) // маршрутизируем запрос
+            sendResponse(clientChannel, response) // отправляем ответ клиенту
+        } catch (e: Exception) {
+            logger.error("Ошибка обработки запроса от клиента", e)
+            clientChannel.close()
         }
+    }
 
-    // чтение запросов от сервера
-    private fun readServerRequest(key: SelectionKey, clientSelector: Selector, serverSelector: Selector) {
-        val clientChannel = key.attachment() as SocketChannel
+    //обработка запроса клиента
+    private fun handleServerRequest(key: SelectionKey) {
         val serverChannel = key.channel() as SocketChannel
         try {
-            val request = receiveRequest(serverChannel)// читаем запрос от сервера
-            val response = request?.let { routeRequest(it) } // обрабатываем запрос и получаем ответ
-            if (response != null) {
-                sendResponse(clientChannel, response)
-            }// отправляем ответ клиенту
-            key.interestOps(SelectionKey.OP_WRITE)
+            val request = receiveRequest(serverChannel) // читаем запрос от сервера
+            if (request.type == FrameType.EXIT) {
+                servers.remove(serverChannel)
+                logger.info { "Отключен сервер ${serverChannel.remoteAddress}" }
+                serverChannel.close()
+                logger.info { "Доступно серверов: ${servers.count()}" }
+            }
         } catch (e: Exception) {
-            logger.error("Ошибка обработки запроса от сервера", e)
-            clientChannel.close()
-            serverChannel.close()
+            logger.error("Показалось", e)
+            //serverChannel.close() - иногда видит чужие ответы
         }
+    }
+
+    // чтение запроса
+    private fun receiveRequest(channel: SocketChannel): Frame {
+        val buffer = ByteBuffer.allocate(1024)
+        var tries = 0
+        var num = channel.read(buffer)
+        while (num == 0) {
+            Thread.sleep(200)
+            num = channel.read(buffer)
+            tries++
+            if (tries > 5)
+                throw TimeoutException("Нечего читать =(")
+        }
+        buffer.flip()
+        val len = buffer.limit() - buffer.position()
+        val str = ByteArray(len)
+        buffer.get(str, buffer.position(), len)
+        val request = serializer.deserialize(str.decodeToString())
+        logger.info { "Получен Frame: ${request.type}" }
+        return request
     }
 
     // маршутизируем запросы к серверу
-    private fun routeRequest(request: ByteArray): ByteArray? {
+    private fun routeRequest(request: Frame): Frame {
+        logger.info { "Доступно серверов: ${servers.count()}" }
         if (servers.isEmpty()) {
             throw IllegalStateException("Нет доступных серверов")
         }
-        val server = servers[currentServerIndex]
-        currentServerIndex = (currentServerIndex + 1) % servers.size // round-robin
-        server.write(ByteBuffer.wrap(request))// отправляем запрос на сервер
+        val server = servers[nextIndex()]
+        val buffer = ByteBuffer.wrap((serializer.serialize(request) + "\n").toByteArray())
+        server.write(buffer)// отправляем запрос на сервер
+        logger.info { "Маршрутизирован Frame к ${server.remoteAddress}" }
         return receiveRequest(server)// получаем ответ от сервера
     }
 
-    // отправка ответов клиенту
-    private fun sendResponse(clientChannel: SocketChannel, response: ByteArray) {
-        val buffer = ByteBuffer.wrap(response)
-        while (buffer.hasRemaining()) {// пока в буфере есть данные
-            clientChannel.write(buffer)// отправляем данные в канал клиента
-        }
+    // отправка ответов
+    private fun sendResponse(clientChannel: SocketChannel, response: Frame) {
+        val buffer = ByteBuffer.wrap((serializer.serialize(response) + '\n').toByteArray())
+        clientChannel.write(buffer)// отправляем данные в канал клиента
+        logger.info { "Отправлен ответ на клиент ${clientChannel.remoteAddress}" }
+    }
+
+    // генерация индекса следующего сервера
+    private fun nextIndex(): Int {
+        if (servers.isEmpty())
+            currentServerIndex = 0
+        else
+            currentServerIndex = (currentServerIndex + 1) % servers.count()
+        return currentServerIndex
     }
 }

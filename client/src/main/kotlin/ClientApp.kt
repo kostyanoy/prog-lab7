@@ -44,6 +44,7 @@ class ClientApp(private val serverAddress: String, private val serverPort: Int) 
      */
     fun stop() {
         if (channel.isOpen) {
+            sendFrame(Frame(FrameType.EXIT))
             channel.close()
             logger.info { "Канал закрыт" }
         }
@@ -55,7 +56,7 @@ class ClientApp(private val serverAddress: String, private val serverPort: Int) 
      * @param frame which should be sent
      */
     fun sendFrame(frame: Frame) {
-        val s = frameSerializer.serialize(frame)
+        val s = frameSerializer.serialize(frame) + "\n"
         channel.socket().getOutputStream().write(s.toByteArray())
         logger.info { "Отправлен запрос на сервер ${frame.type}" }
     }
@@ -68,9 +69,18 @@ class ClientApp(private val serverAddress: String, private val serverPort: Int) 
     fun receiveFrame(): Frame {
         val array = ArrayList<Byte>()
         var char = channel.socket().getInputStream().read()
-        while (Char(char) != '\n') {
+        var attempts = 0
+        val separator = '\n'.code
+        while (char != separator && attempts < 10) {
+            if (char == -1){
+                attempts++
+                logger.info { "Попытка получения ответа №$attempts" }
+                Thread.sleep(500)
+                continue
+            }
             array.add(char.toByte())
             char = channel.socket().getInputStream().read()
+
         }
         val str = String(array.toByteArray())
         val frame = frameSerializer.deserialize(str)

@@ -74,9 +74,9 @@ class InteractionManager(
             lastArgument = if (input.count() == 2) input[1] else null
             executeCommand(command)
         } catch (e: IOException) {
+            e.message?.let { userManager.writeLine(it) }
             exit()
         } catch (e: Throwable) {
-            userManager.writeLine(e.toString())
             userManager.writeLine(e.message ?: "")
         } finally {
             executingFiles.clear()
