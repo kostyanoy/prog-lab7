@@ -1,11 +1,15 @@
 import di.gatewayModule
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.DelicateCoroutinesApi
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import org.koin.core.context.GlobalContext.startKoin
-import kotlin.concurrent.thread
 
 /**
  * Main function that starts the application
  */
+@OptIn(DelicateCoroutinesApi::class)
 fun main(args: Array<String>) {
     startKoin {
         modules(gatewayModule)
@@ -15,7 +19,7 @@ fun main(args: Array<String>) {
 
     var clientPort = 2228
     var serverPort = 2229
-    if (args.isNotEmpty()){
+    if (args.isNotEmpty()) {
         clientPort = args[0].toIntOrNull() ?: clientPort
         serverPort = args[1].toIntOrNull() ?: serverPort
     }
@@ -24,7 +28,7 @@ fun main(args: Array<String>) {
 
     val gateway = GatewayLBService(clientPort, serverPort)
 
-    val thread = thread {
+    val job = CoroutineScope(Dispatchers.IO).launch {
         while (true) {
             when (readlnOrNull()) {
                 "exit" -> {
@@ -36,5 +40,5 @@ fun main(args: Array<String>) {
         }
     }
     gateway.start()
-    thread.join()
+    job.cancel()
 }
