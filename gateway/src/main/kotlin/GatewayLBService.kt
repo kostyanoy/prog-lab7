@@ -8,8 +8,10 @@ import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
 import java.nio.channels.ServerSocketChannel
 import java.nio.channels.SocketChannel
+import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeoutException
+import java.util.concurrent.locks.ReentrantLock
 import java.util.concurrent.locks.ReentrantReadWriteLock
 
 class GatewayLBService(
@@ -26,6 +28,7 @@ class GatewayLBService(
     private val executor = Executors.newFixedThreadPool(10)
     private val responseExecutor = Executors.newCachedThreadPool()
     private val lock = ReentrantReadWriteLock()
+    @Volatile
     private var currentServerIndex = 0
 
     init {
@@ -38,6 +41,19 @@ class GatewayLBService(
         serverServerSocketChannel.register(serverSelector, SelectionKey.OP_ACCEPT)
     }
 
+
+    private val locks = ConcurrentHashMap<Any, ReentrantLock>()
+
+    fun getObjectLock(obj: Any): ReentrantLock {
+        var lock = locks[obj]
+        if (lock == null) {
+            val newLock = ReentrantLock()
+            lock = locks.putIfAbsent(obj, newLock) ?: newLock
+        }
+        return lock
+    }
+
+
     fun start() {
         logger.info("GatewayLBService стартует")
         while (true) {
@@ -47,15 +63,20 @@ class GatewayLBService(
                 while (iterator.hasNext()) {
                     val key = iterator.next()
                     if (key.isAcceptable) {
-//                        executor.execute {
-                            logger.info{"Поток обработал запрос клиента"}
-                            connectToClient(key)
-//                        }
+                        if (getObjectLock(key.channel()).tryLock()){
+                            executor.execute {
+                                logger.info { "Поток обработал запрос клиента" }
+                                connectToClient(key)
+                                getObjectLock(key).unlock()
+                            }
+                        }
                     } else if (key.isReadable) {
-//                        executor.execute {
-                            logger.info{"Поток обработал запрос клиента"}
-                            handleClientRequest(key)
-//                        }
+                        if (getObjectLock(key.channel().blockingLock()).tryLock()) {
+                            executor.execute {
+                                logger.info { "Поток обработал запрос клиента" }
+                                handleClientRequest(key)
+                            }
+                        }
                     }
                     iterator.remove()
                 }
@@ -66,16 +87,20 @@ class GatewayLBService(
                 while (iterator.hasNext()) {
                     val key = iterator.next()
                     if (key.isAcceptable) {
-//                        executor.execute {
-                            logger.info{"Поток обработал запрос сервера"}
-                            connectToServer(key)
-//                        }
-                    } else if (key.isReadable) {
-//                        executor.execute {
-                            logger.info{"Поток обработал запрос сервера"}
-                            handleServerRequest(key)
-//                        }
+                        val s = key.channel().blockingLock()
+                        if (getObjectLock(s).tryLock()) {
+                            executor.execute {
+                                logger.info { "Поток обработал запрос сервера" }
+                                connectToServer(key)
+                            }
+                        }
                     }
+//                    } else if (key.isReadable) {
+////                        executor.execute {
+//                        logger.info { "Поток обработал запрос сервера" }
+//                        handleServerRequest(key)
+////                        }
+//                    }
                     iterator.remove()
                 }
             }
@@ -84,12 +109,12 @@ class GatewayLBService(
 
 
     fun stop() {
-        logger.info{"Остановка GatewayLBService..."}
-//        executor.shutdownNow()
-//        responseExecutor.shutdownNow()
+        logger.info { "Остановка GatewayLBService..." }
+        executor.shutdownNow()
+        responseExecutor.shutdownNow()
         clientSelector.wakeup()
         serverSelector.wakeup()
-        logger.info{"GatewayLBService остановлен"}
+        logger.info { "GatewayLBService остановлен" }
     }
 
 
@@ -118,7 +143,6 @@ class GatewayLBService(
             logger.error("Ошибка при подключении сервера", e)
         }
     }
-
 
 
     private fun handleClientRequest(key: SelectionKey) {
@@ -192,10 +216,23 @@ class GatewayLBService(
     }
 
     private fun nextIndex(): Int {
-        currentServerIndex = if (servers.isEmpty())
-            0
-        else
-            (currentServerIndex + 1) % servers.count()
-        return currentServerIndex
+        if (servers.isEmpty())
+            throw Exception("Пусто")
+        else {
+            while (true) {
+                if (servers[currentServerIndex].read(ByteBuffer.allocate(1)) == -1) {
+                    servers.removeAt(currentServerIndex)
+                    logger.info { "Доступно серверов: ${servers.count()}" }
+                    if (servers.isEmpty())
+                        throw Exception("Пусто")
+                    currentServerIndex %= servers.count()
+                } else {
+                    break
+                }
+            }
+            val t = currentServerIndex
+            currentServerIndex = (currentServerIndex + 1) % servers.count()
+            return t
+        }
     }
 }
