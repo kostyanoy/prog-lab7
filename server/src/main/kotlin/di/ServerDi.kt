@@ -13,11 +13,11 @@ import utils.Saver
 import utils.Storage
 import utils.auth.AuthManager
 import utils.auth.EncryptManager
+import utils.auth.token.TokenManager
+import utils.auth.token.Tokenizer
 import utils.database.DBStorageManager
 import utils.database.Database
 import utils.database.DatabaseManager
-import utils.auth.token.TokenManager
-import utils.auth.token.Tokenizer
 import java.security.MessageDigest
 
 val serverModule = module {
@@ -61,7 +61,7 @@ val serverModule = module {
         DBStorageManager(database = get())
     }
     single<Database> {
-        DatabaseManager("pg", "5432", "studs", fileManager = get())
+        DatabaseManager(fileManager = get())
     }
 
     // server

@@ -17,7 +17,7 @@ class ConsoleManager : ReaderWriter {
     override fun readPassword(): String {
         if (System.console() == null)
             return readLine()
-        return System.console().readPassword().toString().trim()
+        return String(System.console().readPassword()).trim()
     }
 
     override fun writeLine(text: String) = println(text)

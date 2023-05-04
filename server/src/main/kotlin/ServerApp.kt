@@ -33,7 +33,7 @@ class ServerApp(
     private val tokenManager: Tokenizer by inject()
     private val serializer = FrameSerializer()
     private val logger = KotlinLogging.logger {}
-    var running = true
+    private var running = true
     private var selector: Selector = Selector.open()
     private lateinit var serverChannel: ServerSocketChannel
     lateinit var onConnect: (SelectionKey, Selector) -> Unit

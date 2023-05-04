@@ -15,7 +15,7 @@ import utils.database.Database as MyDatabase
  * @param db the name of the database on the server
  */
 class DatabaseManager(
-    private val host: String = "pg",
+    private val host: String = "localhost",
     private val port: String = "5432",
     private val db: String = "studs",
     private val fileManager: FileManager
@@ -27,11 +27,8 @@ class DatabaseManager(
         password = parsePassword()
     }
     private var dataSource: HikariDataSource? = null
-
-
-    override fun getConnection(): Connection {
-        return getDataSource().connection
-    }
+    
+    override fun getConnection(): Connection = getDataSource().connection
 
     override fun close() {
         dataSource?.close()

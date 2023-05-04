@@ -21,7 +21,7 @@ interface Database {
     fun close()
 
     fun updateTables() = getConnection().use {
-        transaction{
+        transaction {
             SchemaUtils.createMissingTablesAndColumns(Users, Bands)
         }
     }

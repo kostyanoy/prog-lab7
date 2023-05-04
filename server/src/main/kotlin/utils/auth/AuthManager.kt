@@ -34,7 +34,7 @@ class AuthManager(
      * @return temporary token
      * @throws CommandException if login exists
      */
-    fun register(login: String, password: String): Token {
+    fun register(login: String, password: String, userStatus: UserStatus = UserStatus.USER): Token {
         if (isUserExists(login)) {
             throw CommandException("Пользователь с таким логином уже существует")
         }
@@ -43,11 +43,11 @@ class AuthManager(
                 Users.insertAndGetId {
                     it[Users.login] = login
                     it[Users.password] = encrypter.encrypt(password)
-                    it[status] = UserStatus.USER
+                    it[status] = userStatus
                 }
             }
         }
-        return tokenManager.createToken(Content(userId.value, UserStatus.USER))
+        return tokenManager.createToken(Content(userId.value, userStatus))
     }
 
     /**
@@ -63,13 +63,13 @@ class AuthManager(
             throw CommandException("Пользователя с таким логином не существует")
         }
         val encryptedPassword = encrypter.encrypt(password)
-        val userId = getConnection().use {
+        val user = getConnection().use {
             transaction {
                 Users.select { (Users.login eq login) and (Users.password eq encryptedPassword) }
-                    .single()[Users.id]
+                    .single()
             }
         }
-        return tokenManager.createToken(Content(userId.value, UserStatus.USER))
+        return tokenManager.createToken(Content(user[Users.id].value, user[Users.status]))
     }
 
     /**
