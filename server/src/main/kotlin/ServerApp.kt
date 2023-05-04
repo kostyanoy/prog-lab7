@@ -9,8 +9,7 @@ import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
 import java.nio.channels.SocketChannel
-import java.util.concurrent.Executors
-import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
 
 class ServerApp(
     private val gatewayAddress: String,
@@ -22,8 +21,7 @@ class ServerApp(
 
     private val logger = KotlinLogging.logger {}
     private lateinit var channel: SocketChannel
-    private val executor = Executors.newFixedThreadPool(10)
-    private val lock = ReentrantReadWriteLock()
+
     fun start() {
         try {
             channel = SocketChannel.open()
@@ -55,6 +53,7 @@ class ServerApp(
             logger.info { "Канал закрыт" }
         }
     }
+
     private fun receiveFromGatewayLBService(): Frame {
         val array = ArrayList<Byte>()
         logger.info { "Ожидаем запроса..." }
@@ -68,33 +67,37 @@ class ServerApp(
         logger.info { "Получен ответ от GatewayLBService ${frame.type}" }
         return frame
     }
-
     private fun serverRequest(request: Frame): Frame {
-        return when (request.type) {
-            FrameType.COMMAND_REQUEST -> {
-                val response = Frame(FrameType.COMMAND_RESPONSE)
-                val commandName = request.body["name"] as String
-                val args = request.body["args"] as Array<Any>
-                val command = commandManager.getCommand(commandName)
-                val result = command.execute(args)
-                response.setValue("data", result)
-                response
+        return try {
+            when (request.type) {
+                FrameType.COMMAND_REQUEST -> {
+                    val response = Frame(FrameType.COMMAND_RESPONSE)
+                    val commandName = request.body["name"] as String
+                    val args = request.body["args"] as Array<Any>
+                    val command = commandManager.getCommand(commandName)
+                    val result = command.execute(args)
+                    response.setValue("data", result)
+                    response
+                }
+                FrameType.LIST_OF_COMMANDS_REQUEST -> {
+                    val response = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
+                    val commands = commandManager.commands.mapValues { it.value.getArgumentTypes() }.toMap()
+                    response.setValue("commands", commands)
+                    response
+                }
+                else -> {
+                    val response = Frame(FrameType.COMMAND_RESPONSE)
+                    response.setValue("data", "Неверный тип запроса")
+                    response
+                }
             }
-
-            FrameType.LIST_OF_COMMANDS_REQUEST -> {
-                val response = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
-                val commands = commandManager.commands.mapValues { it.value.getArgumentTypes() }.toMap()
-                response.setValue("commands", commands)
-                response
-            }
-
-            else -> {
-                val response = Frame(FrameType.COMMAND_RESPONSE)
-                response.setValue("data", "Неверный тип запроса")
-                response
-            }
+        } catch (e: Exception) {
+            val response = Frame(FrameType.COMMAND_RESPONSE)
+            response.setValue("data", "Произошла ошибка: ${e.message}")
+            response
         }
     }
+
 
     private fun sendResponse(response: Frame) {
         val buffer = ByteBuffer.allocate(1024)
