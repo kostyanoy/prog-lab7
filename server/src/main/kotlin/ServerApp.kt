@@ -39,7 +39,7 @@ class ServerApp(
         try {
             channel = SocketChannel.open()
             channel.socket().connect(InetSocketAddress(gatewayAddress, gatewayPort), 5000)
-            logger.info { "Подключено к  GatewayLBService: $gatewayAddress:$gatewayPort" }
+            logger.info { "Подключено к GatewayLBService: $gatewayAddress:$gatewayPort" }
             while (isActive) {
                 try {
                     val request = receiveFromGatewayLBService()
@@ -68,7 +68,9 @@ class ServerApp(
             logger.info { "Канал закрыт" }
         }
     }
-
+    /**
+    *Receives a frame from the GatewayLBService.
+     */
     private fun receiveFromGatewayLBService(): Frame {
         val array = ArrayList<Byte>()
         logger.info { "Ожидаем запроса..." }
@@ -136,6 +138,10 @@ class ServerApp(
     }
 
 
+    /**
+    *Sends the provided [response] to the gateway.
+    *@param response [Frame] object to be sent.
+     */
     private fun sendResponse(response: Frame) {
         val serializedResponse = (frameSerializer.serialize(response) + "\n").toByteArray()
         val buffer = ByteBuffer.wrap(serializedResponse)
@@ -143,6 +149,10 @@ class ServerApp(
         logger.info { "Отправлен Frame ${response.type}" }
     }
 
+    /**
+    *Executes a command with the specified name and arguments, and returns the result.
+    *@param [token] the authorization token to use when executing the command.
+     */
     private fun execute(commandName: String, args: Array<Any>, token: String): CommandResult {
         val command = commandManager.getCommand(commandName)
         val content = if (token.isBlank()) Content(-1, UserStatus.USER) else tokenManager.getContent(Token.parse(token))
@@ -156,7 +166,9 @@ class ServerApp(
             CommandResult.Failure(commandName, e)
         }
     }
-
+    /**
+    *Updates database tables using [Database.updateTables].
+     */
     fun updateTables() {
         val database: Database by inject()
         database.updateTables()

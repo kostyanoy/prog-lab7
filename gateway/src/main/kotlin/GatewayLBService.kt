@@ -18,6 +18,12 @@ import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.read
 import kotlin.concurrent.write
 
+/**
+ * Gateway Load Balancer service.
+ *
+ * @property [clientPort] the port number for incoming client connections.
+ * @property [serverPort] the port number for outgoing server connections.
+ */
 class GatewayLBService(
     clientPort: Int,
     serverPort: Int
@@ -46,7 +52,12 @@ class GatewayLBService(
         serverServerSocketChannel.configureBlocking(false)
         serverServerSocketChannel.register(serverSelector, SelectionKey.OP_ACCEPT)
     }
-
+    /**
+     * Locks the selection key and executes the given action.
+     *
+     * @param [key] the selection key to lock.
+     * @param [action] the action to execute.
+     */
     private fun lockKey(key: SelectionKey, action: () -> Unit) {
         if (key.attachment() == null) {
             key.attach(ReentrantLock())
@@ -60,7 +71,9 @@ class GatewayLBService(
         }
     }
 
-
+    /**
+     * Starts the GatewayLBService.
+     */
     fun start() {
         logger.info("GatewayLBService стартует")
         while (isRunning) {
@@ -106,6 +119,9 @@ class GatewayLBService(
     }
 
 
+    /**
+     * Stops the GatewayLBService.
+     */
     fun stop() {
         logger.info { "Остановка GatewayLBService..." }
         isRunning = false
@@ -116,7 +132,9 @@ class GatewayLBService(
         logger.info { "GatewayLBService остановлен" }
     }
 
-
+    /**
+     * Accepts a new client connection and registers it for reading.
+     */
     private fun connectToClient() {
         try {
             val clientChannel = clientServerSocketChannel.accept()
@@ -127,7 +145,9 @@ class GatewayLBService(
             logger.error("Ошибка при подключении клиента", e)
         }
     }
-
+    /**
+     * Connects to a server.
+     */
     private fun connectToServer() {
         try {
             val serverChannel = serverServerSocketChannel.accept()
@@ -142,7 +162,11 @@ class GatewayLBService(
             logger.error("Ошибка при подключении сервера", e)
         }
     }
-
+    /**
+     * Handles a request received from a client.
+     *
+     * @param [key] the selection key associated with the client channel.
+     */
 
     private fun handleClientRequest(key: SelectionKey) {
         val clientChannel = key.channel() as SocketChannel
@@ -160,7 +184,9 @@ class GatewayLBService(
             clientChannel.close()
         }
     }
-
+    /**
+     * Receive a [Frame] from the given [channel].
+     */
     private fun receiveRequest(channel: SocketChannel): Frame {
         val strBuilder = StringBuilder()
         val buffer = ByteBuffer.allocate(1024)
@@ -186,7 +212,9 @@ class GatewayLBService(
         logger.info { "Получен Frame: ${request.type}" }
         return request
     }
-
+    /**
+    * Routes a [request] to an available server and returns its response.
+    */
     private fun routeRequest(request: Frame): Frame {
         logger.info { "Доступно серверов: ${servers.count()}" }
         if (servers.isEmpty()) {
@@ -204,7 +232,12 @@ class GatewayLBService(
         clientChannel.write(buffer)
         logger.info { "Отправлен ответ на клиент ${clientChannel.remoteAddress}" }
     }
-
+    /**
+     * Returns the index of the next available server to route requests to.
+     * If there are no available servers, throws an exception.
+     *
+     * @return the index of the next available server to route requests to
+     */
     private fun nextIndex(): Int {
         if (servers.isEmpty())
             throw Exception("Пусто")
