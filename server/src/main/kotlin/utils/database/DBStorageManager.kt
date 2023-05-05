@@ -85,7 +85,7 @@ class DBStorageManager(private val database: Database) : Storage<LinkedHashMap<I
         return true
     }
 
-    private fun updateCollection() {
+    private fun updateCollection() = getConnection().use {
         val bands = LinkedHashMap<Int, MusicBand>()
         transaction {
             Bands.innerJoin(Users).selectAll().map {

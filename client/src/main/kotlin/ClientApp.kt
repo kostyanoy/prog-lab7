@@ -72,7 +72,7 @@ class ClientApp(private val serverAddress: String, private val serverPort: Int) 
             if (char == -1) {
                 attempts++
                 logger.info { "Попытка получения ответа №$attempts" }
-                Thread.sleep(500)
+                Thread.sleep(1000)
                 continue
             }
             array.add(char.toByte())

@@ -1,19 +1,13 @@
-import di.gatewayModule
+//import di.gatewayModule
 import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.DelicateCoroutinesApi
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import mu.KotlinLogging
-import org.koin.core.context.GlobalContext.startKoin
 
 /**
  * Main function that starts the application
  */
-@OptIn(DelicateCoroutinesApi::class)
 fun main(args: Array<String>) {
-    startKoin {
-        modules(gatewayModule)
-    }
 
     val logger = KotlinLogging.logger {}
 

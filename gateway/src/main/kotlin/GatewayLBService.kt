@@ -2,6 +2,7 @@ import mu.KotlinLogging
 import org.koin.core.component.KoinComponent
 import serialize.FrameSerializer
 import java.io.IOException
+import java.lang.StringBuilder
 import java.net.InetSocketAddress
 import java.net.SocketException
 import java.nio.ByteBuffer
@@ -147,12 +148,13 @@ class GatewayLBService(
         val clientChannel = key.channel() as SocketChannel
         try {
             val request = receiveRequest(clientChannel)
-            val response = routeRequest(request)
-            sendResponse(clientChannel, response)
             if (request.type == FrameType.EXIT) {
                 logger.info { "Отключен клиент ${clientChannel.remoteAddress}" }
                 clientChannel.close()
+                return
             }
+            val response = routeRequest(request)
+            sendResponse(clientChannel, response)
         } catch (e: Exception) {
             logger.error("Ошибка обработки запроса от клиента", e)
             clientChannel.close()
@@ -160,21 +162,27 @@ class GatewayLBService(
     }
 
     private fun receiveRequest(channel: SocketChannel): Frame {
+        val strBuilder = StringBuilder()
         val buffer = ByteBuffer.allocate(1024)
         var tries = 0
         var num = channel.read(buffer)
         while (num == 0) {
-            Thread.sleep(200)
+            Thread.sleep(500)
             num = channel.read(buffer)
             tries++
             if (tries > 5)
                 throw TimeoutException("Нечего читать =(")
         }
-        buffer.flip()
-        val len = buffer.limit() - buffer.position()
-        val str = ByteArray(len)
-        buffer.get(str, buffer.position(), len)
-        val request = serializer.deserialize(str.decodeToString())
+        while (num != 0) {
+            buffer.flip()
+            val len = buffer.limit() - buffer.position()
+            val array = ByteArray(len)
+            buffer.get(array, buffer.position(), len)
+            strBuilder.append(array.decodeToString())
+            buffer.flip()
+            num = channel.read(buffer)
+        }
+        val request = serializer.deserialize(strBuilder.toString())
         logger.info { "Получен Frame: ${request.type}" }
         return request
     }

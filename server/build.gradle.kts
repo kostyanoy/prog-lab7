@@ -4,7 +4,6 @@ plugins {
     kotlin("jvm")
     id("org.jetbrains.kotlin.plugin.serialization")
     id("org.jetbrains.dokka")
-    id("io.github.kostyanoy.helios-push")
     application
 }
 
@@ -70,17 +69,6 @@ tasks.jar {
         from(zipTree(file.absoluteFile))
     }
     duplicatesStrategy = DuplicatesStrategy.INCLUDE
-}
-
-
-tasks.helios {
-    projectName = "lab7"
-    isu = "367379"
-    folderPath = "~/labs/programming"
-    val arr = arrayOf(
-        "build/libs/server-1.0-SNAPSHOT.jar",
-    )
-    files = arr
 }
 
 application {
