@@ -16,6 +16,7 @@ class FilterLessThanGenre : StorageCommand() {
 
     override fun execute(args: Array<Any>): CommandResult {
         val userGenre = args[0] as MusicGenre
+
         val message = buildString {
             storage.getCollection { userGenre > value.genre }.forEach(::appendLine)
         }

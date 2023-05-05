@@ -31,7 +31,7 @@ class FileManager {
      */
     fun readFile(path: String): String {
         if (!File(path).canRead()) {
-            throw FileException("Не получается открыть файл")
+            throw FileException("Не получается открыть файл: $path")
         }
         val scanner = Scanner(File(path))
         return buildString {

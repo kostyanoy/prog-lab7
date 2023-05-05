@@ -4,11 +4,12 @@ import Command
 import commands.*
 import exceptions.CommandException
 import org.koin.core.component.KoinComponent
+
 /**
  * The class is used to refer to commands
  */
-class CommandManager() : KoinComponent {
-    val commands = mapOf<String, Command>(
+class CommandManager : KoinComponent {
+    val commands = mapOf(
         "help" to Help(),
         "info" to Info(),
         "show" to Show(),
@@ -21,13 +22,16 @@ class CommandManager() : KoinComponent {
         "remove_greater_key" to RemoveGreaterKey(),
         "count_greater_than_description" to CountGreaterThanDescription(),
         "filter_less_than_genre" to FilterLessThanGenre(),
-        "undo" to Undo()
     )
+
+    private val authCommands = mapOf(
+        "login" to Login(),
+        "register" to Register(),
+    )
+
     /**
      * Checks if the command exists
      */
-    fun getCommand(name: String): Command {
-        val command = commands[name] ?: throw CommandException("Такой команды не существует")
-        return command
-    }
+    fun getCommand(name: String): Command =
+        commands[name] ?: authCommands[name] ?: throw CommandException("Такой команды не существует")
 }

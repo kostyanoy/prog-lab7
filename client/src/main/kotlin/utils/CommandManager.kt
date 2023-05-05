@@ -33,15 +33,12 @@ class CommandManager {
     /**
      * Send request to the server to get list of server commands
      *
-     * @param clientApp the current client connected to the server
+     * @param response response from the server
      * @return true if the request was successful
      */
-    fun updateCommands(clientApp: ClientApp): Boolean {
-        val frame = Frame(FrameType.LIST_OF_COMMANDS_REQUEST)
-        clientApp.sendFrame(frame)
-        val respond = clientApp.receiveFrame()
-        if (respond.type != FrameType.LIST_OF_COMMANDS_RESPONSE) return false
-        val serverCommands = respond.body["commands"] as? Map<String, Array<ArgumentType>> ?: return false
+    fun updateCommands(response: Frame): Boolean {
+        if (response.type != FrameType.LIST_OF_COMMANDS_RESPONSE) return false
+        val serverCommands = response.body["commands"] as? Map<String, Array<ArgumentType>> ?: return false
         commands.clear()
         commands.putAll(clientCommands.mapValues { e -> e.value.getArgumentTypes() })
         commands.putAll(serverCommands)
@@ -62,11 +59,12 @@ class CommandManager {
      * @param clientApp the current client connected to the server
      * @return [CommandResult] of the command
      */
-    fun executeCommand(clientApp: ClientApp, command: String, args: Array<Any>): CommandResult? {
+    fun executeCommand(clientApp: ClientApp, token: String, command: String, args: Array<Any>): CommandResult? {
         if (isClientCommand(command)) {
             return clientCommands[command]!!.execute(args)
         }
         val frame = Frame(FrameType.COMMAND_REQUEST)
+        frame.setValue("token", token)
         frame.setValue("name", command)
         frame.setValue("args", args)
         clientApp.sendFrame(frame)

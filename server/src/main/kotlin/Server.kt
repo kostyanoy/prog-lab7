@@ -6,7 +6,8 @@ import mu.KotlinLogging
 import org.koin.core.context.GlobalContext.startKoin
 
 /**
- * Main function that starts the application
+ * Main function that starts the server application and listens to commands from the console.
+ * The application can be stopped using the 'exit' command, and db tables updates by update.
  */
 fun main(args: Array<String>) {
     startKoin {
@@ -32,10 +33,11 @@ fun main(args: Array<String>) {
                     logger.info { "Сервер закрылся" }
                     break
                 }
+
+                "update" -> server.updateTables()
             }
         }
     }
     server.start()
     job.cancel()
 }
-

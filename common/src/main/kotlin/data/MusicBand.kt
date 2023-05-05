@@ -28,7 +28,8 @@ data class MusicBand(
     val bestAlbum: Album?,
     val id: Int = generateId(arrayOf(name, description, genre.toString())),
     @Contextual
-    val creationTime: ZonedDateTime = ZonedDateTime.now()
+    val creationTime: ZonedDateTime = ZonedDateTime.now(),
+    val owner: String? = null
 ) : Comparable<MusicBand> {
 
     override fun compareTo(other: MusicBand): Int {

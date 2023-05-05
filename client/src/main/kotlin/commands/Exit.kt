@@ -10,7 +10,7 @@ class Exit : ClientCommand() {
     override fun getDescription(): String = "exit : закрыть соединение с сервером"
 
     override fun execute(args: Array<Any>): CommandResult {
-        interactor.exit()
+//        interactor.exit()
         return CommandResult.Success("Exit")
     }
 

@@ -1,9 +1,9 @@
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
-    kotlin("jvm") version "1.7.10"
-    id("org.jetbrains.kotlin.plugin.serialization") version "1.8.20-Beta"
-    id("org.jetbrains.dokka") version "1.7.20"
+    kotlin("jvm")
+    id("org.jetbrains.kotlin.plugin.serialization")
+    id("org.jetbrains.dokka")
     application
 }
 
@@ -15,25 +15,27 @@ repositories {
 }
 
 dependencies {
-    implementation(project(mapOf("path" to ":common")))
-    implementation(project(mapOf("path" to ":common")))
-    implementation(project(mapOf("path" to ":server")))
-    val kotlinVersion = "1.8.0"
-    val koinVersion = "3.3.3"
-    val mockkVersion = "1.13.4"
+    val kotlinVersion: String by project
+    val koinVersion: String by project
+    val mockkVersion: String by project
+    val junitVersion: String by project
+    val serializationVersion: String by project
+    val kotlinLoggingVersion: String by project
+    val slf4Version: String by project
+    val coroutinesVersion: String by project
 
-    testImplementation("org.junit.jupiter:junit-jupiter:5.9.2")
+    testImplementation("org.junit.jupiter:junit-jupiter:$junitVersion")
     testImplementation(kotlin("test"))
     testImplementation("io.mockk:mockk:${mockkVersion}")
     testImplementation("io.insert-koin:koin-test-junit5:$koinVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test:$kotlinVersion")
     testImplementation("org.jetbrains.kotlin:kotlin-test-junit:$kotlinVersion")
     implementation(kotlin("serialization", version = kotlinVersion))
-    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:$serializationVersion")
     implementation("io.insert-koin:koin-core:$koinVersion")
-    implementation("org.slf4j:slf4j-log4j12:2.0.6")
-    implementation("io.github.microutils:kotlin-logging-jvm:3.0.5")
-    implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-core:1.5.2")
+    implementation("org.slf4j:slf4j-log4j12:$slf4Version")
+    implementation("io.github.microutils:kotlin-logging-jvm:$kotlinLoggingVersion")
+    implementation ("org.jetbrains.kotlinx:kotlinx-coroutines-core:$coroutinesVersion")
 
 
     implementation(project(":common"))

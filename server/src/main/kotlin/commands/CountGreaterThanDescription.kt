@@ -16,6 +16,7 @@ class CountGreaterThanDescription : StorageCommand() {
 
     override fun execute(args: Array<Any>): CommandResult {
         val userDescription = args[0] as String
+
         val countDescription = storage.getCollection { userDescription < value.description }
             .count()
         return CommandResult.Success("Count_greater_than_description", "$countDescription")

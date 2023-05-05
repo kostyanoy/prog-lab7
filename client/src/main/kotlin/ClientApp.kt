@@ -43,11 +43,8 @@ class ClientApp(private val serverAddress: String, private val serverPort: Int) 
      * Closes the connection
      */
     fun stop() {
-        if (channel.isOpen) {
-            sendFrame(Frame(FrameType.EXIT))
-            channel.close()
-            logger.info { "Канал закрыт" }
-        }
+        channel.close()
+        logger.info { "Канал закрыт" }
     }
 
     /**
@@ -72,7 +69,7 @@ class ClientApp(private val serverAddress: String, private val serverPort: Int) 
         var attempts = 0
         val separator = '\n'.code
         while (char != separator && attempts < 10) {
-            if (char == -1){
+            if (char == -1) {
                 attempts++
                 logger.info { "Попытка получения ответа №$attempts" }
                 Thread.sleep(500)
@@ -80,7 +77,6 @@ class ClientApp(private val serverAddress: String, private val serverPort: Int) 
             }
             array.add(char.toByte())
             char = channel.socket().getInputStream().read()
-
         }
         val str = String(array.toByteArray())
         val frame = frameSerializer.deserialize(str)

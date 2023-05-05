@@ -14,7 +14,7 @@ class Show : StorageCommand() {
         val message = buildString {
             appendLine("Коллекция содержит: ")
             storage.getCollection { true }
-                .forEach { appendLine("${it.key} = ${it.value}") }
+                .forEach { appendLine("(${it.value.owner}) ${it.key} = ${it.value}") }
         }
         return CommandResult.Success("Show", message)
     }

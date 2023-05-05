@@ -1,35 +1,72 @@
 package di
+
 import FileManager
 import Frame
 import commands.CommandHistory
 import data.MusicBand
 import org.koin.dsl.module
 import serialize.FrameSerializer
+import serialize.SerializeManager
 import serialize.Serializer
 import utils.*
-import serialize.SerializeManager
+import utils.auth.AuthManager
+import utils.auth.EncryptManager
+import utils.auth.token.TokenManager
+import utils.auth.token.Tokenizer
+import utils.database.Database
+import utils.database.DatabaseManager
+import java.security.MessageDigest
+import Frame
 
 val serverModule = module {
-    factory<Saver<LinkedHashMap<Int, MusicBand>>> {
+    // files
+    single<Saver<LinkedHashMap<Int, MusicBand>>> {
         FileSaver("save.txt", serializer = get(), fileManager = get())
     }
-    factory<Serializer<LinkedHashMap<Int, MusicBand>>> {
+    single {
+        FileManager()
+    }
+
+    // serialization
+    single<Serializer<LinkedHashMap<Int, MusicBand>>> {
         SerializeManager()
     }
     factory<Serializer<Frame>> {
         FrameSerializer()
     }
 
-    factory {
-        FileManager()
-    }
+    // commands
     single {
         CommandHistory()
-    }
-    single<Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand>> {
-        StorageManager()
     }
     single {
         CommandManager()
     }
- }
+
+    //auth
+    single {
+        MessageDigest.getInstance("SHA-384")
+    }
+    single {
+        EncryptManager(encrypter = get(), fileManager = get(), ".key")
+    }
+    single<Tokenizer> {
+        TokenManager(encrypter = get())
+    }
+    single {
+        AuthManager(tokenManager = get(), encrypter = get(), database = get())
+    }
+
+    // database
+    single<Storage<LinkedHashMap<Int, MusicBand>, Int, MusicBand>> {
+        DBStorageManager(database = get())
+    }
+    single<Database> {
+        DatabaseManager(fileManager = get())
+    }
+
+    // server
+    single {
+        CommandManager()
+    }
+}

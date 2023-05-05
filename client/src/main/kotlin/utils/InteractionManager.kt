@@ -7,6 +7,7 @@ import FileManager
 import data.MusicGenre
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
+import utils.state.InteractionState
 import java.io.IOException
 
 /**
@@ -19,26 +20,35 @@ import java.io.IOException
 class InteractionManager(
     private val userManager: ReaderWriter,
     private val fileManager: FileManager,
-    private val commandManager: CommandManager
+    private val commandManager: CommandManager,
+    private var nextState: InteractionState
 ) : KoinComponent, Interactor {
 
     private val validator: Validator by inject()
-    private val invitation = ">>>"
     private var isActive = true
+    private var token = ""
     private var lastArgument: String? = null
     private val executingFiles = ArrayDeque<String>()
     private lateinit var clientApp: ClientApp
 
     override fun getClient(): ClientApp = clientApp
+    override fun setToken(token: String) {
+        this.token = token
+    }
+
+    override fun getToken() = token
+
+    override fun setState(state: InteractionState) {
+        this.nextState = state
+    }
+
 
     override fun start(clientApp: ClientApp) {
-        this.isActive = true
+        isActive = true
+        token = ""
         this.clientApp = clientApp
-        userManager.writeLine("Здрасьте, для вывода списка команд введите help")
-        executeCommand("update_commands")
         while (isActive) {
-            userManager.write(invitation)
-            interact(userManager.readLine())
+            nextState.start()
         }
     }
 
@@ -46,6 +56,8 @@ class InteractionManager(
         isActive = false
         clientApp.stop()
     }
+
+    override fun showMessage(message: String) = userManager.writeLine(message)
 
     override fun executeCommandFile(path: String) {
         val text = fileManager.readFile(path)
@@ -58,13 +70,8 @@ class InteractionManager(
         executingFiles.removeLast()
     }
 
-    /**
-     * Handles the string with command and possible argument
-     *
-     * @param text line from the user with the name of the command
-     */
-    private fun interact(text: String) {
-        val input = text.trim().split(" ")
+    override fun interact(text: String) {
+        val input = text.split(" ")
         if (input.count() > 2) {
             userManager.writeLine("Слишком много аргументов в строке")
             return
@@ -87,7 +94,7 @@ class InteractionManager(
         val argTypes = commandManager.getArgs(command)
         val args = getArgs(argTypes)
 
-        when (val result = commandManager.executeCommand(clientApp, command, args)) {
+        when (val result = commandManager.executeCommand(clientApp, token, command, args)) {
             is CommandResult.Failure -> userManager.writeLine("Команда ${result.commandName} завершилась ошибкой: ${result.throwable.message}")
             is CommandResult.Success -> {
                 userManager.writeLine("Команда ${result.commandName} исполнена.")
