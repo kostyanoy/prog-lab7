@@ -125,11 +125,6 @@ class ServerApp(
                 socketChannel.write(buffer)
                 buffer.flip()
             }
-//            buffer.clear()
-//            buffer.put(serializer.serialize(response).toByteArray())
-//            buffer.put('\n'.code.toByte())
-//            buffer.flip()
-//            socketChannel.write(buffer)
         } catch (e: Throwable) {
             val sw = StringWriter()
             val pw = PrintWriter(sw)

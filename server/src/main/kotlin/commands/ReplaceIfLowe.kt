@@ -20,13 +20,7 @@ class ReplaceIfLowe : StorageCommand() {
         val userElement = args[1] as MusicBand
         val content = args[2] as Content
 
-//        val collection = storage.getCollection { true }
-//        if (userKey !in collection.keys) {
-//            return CommandResult.Failure("Replace_if_lowe", ParameterException("Элемента с таким ключом не существует"))
-//        }
-        //if (userElement < collection[userKey]!!) {
         storage.update(content.userId, userKey, userElement)
-        //}
         return CommandResult.Success("Replace_if_lowe")
     }
 

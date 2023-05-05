@@ -17,10 +17,8 @@ class RemoveGreaterKey : UndoableCommand() {
         val userKey = args[0] as Int
         val content = args[1] as Content
 
-        //previousPair.clear()
         storage.getCollection { userKey < key }
             .forEach {
-                //previousPair.add(it.key to it.value)
                 storage.removeKey(content.userId, it.key)
             }
         return CommandResult.Success("Remove_greater_key")
@@ -30,11 +28,6 @@ class RemoveGreaterKey : UndoableCommand() {
 
     override fun undo(): CommandResult {
         throw UnsupportedOperationException("Эта операция не поддерживается в текущей версии")
-//        previousPair.forEach { (key, value) ->
-//            storage.insert(1, key, value!!)
-//        }
-//        previousPair.clear()
-//        return CommandResult.Success("Undo Remove_greater_key")
     }
 }
 

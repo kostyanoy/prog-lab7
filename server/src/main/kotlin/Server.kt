@@ -29,11 +29,6 @@ fun main(args: Array<String>) {
                 channel.close()
             }
         }
-//        timerAction(3000) {
-//            onTimerOn {
-//                println("sas")
-//            }
-//        }
     }
 //    val server = ServerApp(port)
 
@@ -55,9 +50,4 @@ fun main(args: Array<String>) {
     }
     server.start()
     thread.join()
-//    startKoin { modules(serverModule) }
-//    val a = object : KoinComponent {
-//        val a: AuthManager by inject()
-//    }
-//    a.a.login("", "")
 }

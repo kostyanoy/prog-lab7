@@ -22,10 +22,9 @@ class CommandManager : KoinComponent {
         "remove_greater_key" to RemoveGreaterKey(),
         "count_greater_than_description" to CountGreaterThanDescription(),
         "filter_less_than_genre" to FilterLessThanGenre(),
-        //"undo" to Undo()
     )
 
-    val authCommands = mapOf(
+    private val authCommands = mapOf(
         "login" to Login(),
         "register" to Register(),
     )

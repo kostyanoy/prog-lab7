@@ -19,23 +19,12 @@ class Update : UndoableCommand() {
         val userElement = args[1] as MusicBand
         val content = args[2] as Content
 
-//        previousPair.clear()
-//        val collection = storage.getCollection { true }
-//        if (userKey !in collection.keys) {
-//            return CommandResult.Failure("Update", ParameterException("Элемента с таким ключом не существует"))
-//        }
-//        previousPair.add(userKey to collection[userKey])
         storage.update(content.userId, userKey, userElement)
         return CommandResult.Success("Update")
     }
 
     override fun undo(): CommandResult {
         throw UnsupportedOperationException("Эта операция не поддерживается в текущей версии")
-//        previousPair.forEach { (key, value) ->
-//            storage.update(1, key, value!!)
-//        }
-//        previousPair.clear()
-//        return CommandResult.Success("Undo Update")
     }
 
     override fun getArgumentTypes(): Array<ArgumentType> = arrayOf(ArgumentType.INT, ArgumentType.MUSIC_BAND)
