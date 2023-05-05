@@ -5,6 +5,7 @@ import java.io.IOException
 import java.net.InetSocketAddress
 import java.net.SocketException
 import java.nio.ByteBuffer
+import java.nio.channels.CancelledKeyException
 import java.nio.channels.SelectionKey
 import java.nio.channels.Selector
 import java.nio.channels.ServerSocketChannel
@@ -62,38 +63,43 @@ class GatewayLBService(
     fun start() {
         logger.info("GatewayLBService стартует")
         while (isRunning) {
-            if (clientSelector.selectNow() > 0) {
-                val keys = clientSelector.selectedKeys()
-                val iterator = keys.iterator()
-                while (iterator.hasNext()) {
-                    val key = iterator.next()
-                    if (key.isAcceptable) {
-                        lockKey(key) {
-                            connectToClient()
-                            logger.info { "Поток подключил клиент" }
+            try {
+                if (clientSelector.selectNow() > 0) {
+                    val keys = clientSelector.selectedKeys()
+                    val iterator = keys.iterator()
+                    while (iterator.hasNext()) {
+                        val key = iterator.next()
+                        if (key.isAcceptable) {
+                            lockKey(key) {
+                                connectToClient()
+                                logger.info { "Поток подключил клиент" }
+                            }
+                        } else if (key.isReadable) {
+                            lockKey(key) {
+                                logger.info { "Начало обработки запроса клиента" }
+                                handleClientRequest(key)
+                                logger.info { "Поток обработал запрос клиента" }
+                            }
                         }
-                    } else if (key.isReadable) {
-                        lockKey(key) {
-                            handleClientRequest(key)
-                            logger.info { "Поток обработал запрос клиента" }
-                        }
+                        iterator.remove()
                     }
-                    iterator.remove()
                 }
-            }
-            if (serverSelector.selectNow() > 0) {
-                val keys = serverSelector.selectedKeys()
-                val iterator = keys.iterator()
-                while (iterator.hasNext()) {
-                    val key = iterator.next()
-                    if (key.isAcceptable) {
-                        lockKey(key) {
-                            connectToServer()
-                            logger.info { "Поток подключил сервер" }
+                if (serverSelector.selectNow() > 0) {
+                    val keys = serverSelector.selectedKeys()
+                    val iterator = keys.iterator()
+                    while (iterator.hasNext()) {
+                        val key = iterator.next()
+                        if (key.isAcceptable) {
+                            lockKey(key) {
+                                connectToServer()
+                                logger.info { "Поток подключил сервер" }
+                            }
                         }
+                        iterator.remove()
                     }
-                    iterator.remove()
                 }
+            } catch (e: CancelledKeyException){
+                logger.error { "Кто-то не вовремя отключился" }
             }
         }
     }
