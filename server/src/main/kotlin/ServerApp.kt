@@ -103,6 +103,7 @@ class ServerApp(
                         request.body["token"] as String
                     )
                     response.setValue("data", result)
+                    request.body["address"]?.let { response.setValue("address", it) }
                     return response
                 }
 
@@ -110,6 +111,7 @@ class ServerApp(
                     val response = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
                     val commands = commandManager.commands.mapValues { it.value.getArgumentTypes() }.toMap()
                     response.setValue("commands", commands)
+                    request.body["address"]?.let { response.setValue("address", it) }
                     return response
                 }
 
@@ -121,6 +123,7 @@ class ServerApp(
                         ""
                     )
                     response.setValue("data", result)
+                    request.body["address"]?.let { response.setValue("address", it) }
                     return response
                 }
 
