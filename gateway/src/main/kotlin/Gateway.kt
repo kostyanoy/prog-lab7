@@ -1,8 +1,5 @@
-//import di.gatewayModule
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import mu.KotlinLogging
+import kotlin.concurrent.thread
 
 /**
  * Main function that starts the application
@@ -22,7 +19,7 @@ fun main(args: Array<String>) {
 
     val gateway = GatewayLBService(clientPort, serverPort)
 
-    val job = CoroutineScope(Dispatchers.IO).launch {
+    val console = thread {
         while (true) {
             when (readlnOrNull()) {
                 "exit" -> {
@@ -34,5 +31,4 @@ fun main(args: Array<String>) {
         }
     }
     gateway.start()
-    job.cancel()
 }
