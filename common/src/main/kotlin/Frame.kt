@@ -1,6 +1,5 @@
 import kotlinx.serialization.Contextual
 import kotlinx.serialization.Serializable
-
 /**
  * Class used to transfer information between server and client
  *

@@ -1,9 +1,7 @@
 import di.serverModule
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import mu.KotlinLogging
 import org.koin.core.context.GlobalContext.startKoin
+import kotlin.concurrent.thread
 
 /**
  * Main function that starts the server application and listens to commands from the console.
@@ -25,7 +23,7 @@ fun main(args: Array<String>) {
 
     val server = ServerApp("localhost", serverPort)
 
-    val job = CoroutineScope(Dispatchers.IO).launch {
+    val console = thread {
         while (true) {
             when (readlnOrNull()) {
                 "exit" -> {
@@ -39,5 +37,4 @@ fun main(args: Array<String>) {
         }
     }
     server.start()
-    job.cancel()
 }

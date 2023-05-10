@@ -16,6 +16,10 @@ import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
 import java.nio.ByteBuffer
 import java.nio.channels.SocketChannel
+import java.util.concurrent.BlockingQueue
+import java.util.concurrent.Executors
+import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.locks.ReentrantReadWriteLock
 
 /**
  * The ServerApp class represents the server application that listens to incoming client requests,executes them and sends back the response.
@@ -31,6 +35,10 @@ class ServerApp(
 
     private val logger = KotlinLogging.logger {}
     private lateinit var channel: SocketChannel
+    private val executor = Executors.newFixedThreadPool(10)
+    private val responseExecutor = Executors.newCachedThreadPool()
+    private val lock = ReentrantReadWriteLock()
+    private val addressQueue: BlockingQueue<String> = LinkedBlockingQueue()
 
     /**
      * Starts the server and listens for incoming client requests.
@@ -43,14 +51,17 @@ class ServerApp(
             while (isActive) {
                 try {
                     val request = receiveFromGatewayLBService()
+                    val clientAddress = request.body["address"] as String
+                    addressQueue.add(clientAddress)
                     val response = serverRequest(request)
-                    sendResponse(response)
+                    responseExecutor.execute {
+                        sendResponse(response)
+                    }
                 } catch (e: IOException) {
                     logger.error { e }
                     channel.close()
                     isActive = false
                 }
-
             }
         } catch (e: SocketTimeoutException) {
             logger.info { "GatewayLBService не отвечает (${e.message})" }
@@ -58,6 +69,7 @@ class ServerApp(
             logger.info { "Не удается подключиться к GatewayLBService (${e.message})" }
         }
     }
+
 
     /**
     Stops the server
@@ -103,6 +115,7 @@ class ServerApp(
                         request.body["token"] as String
                     )
                     response.setValue("data", result)
+                    request.body["address"]?.let { response.setValue("address", it) }
                     return response
                 }
 
@@ -110,6 +123,7 @@ class ServerApp(
                     val response = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
                     val commands = commandManager.commands.mapValues { it.value.getArgumentTypes() }.toMap()
                     response.setValue("commands", commands)
+                    request.body["address"]?.let { response.setValue("address", it) }
                     return response
                 }
 
@@ -121,6 +135,7 @@ class ServerApp(
                         ""
                     )
                     response.setValue("data", result)
+                    request.body["address"]?.let { response.setValue("address", it) }
                     return response
                 }
 
@@ -136,7 +151,6 @@ class ServerApp(
             response
         }
     }
-
 
     /**
     *Sends the provided [response] to the gateway.
@@ -156,16 +170,22 @@ class ServerApp(
     private fun execute(commandName: String, args: Array<Any>, token: String): CommandResult {
         val command = commandManager.getCommand(commandName)
         val content = if (token.isBlank()) Content(-1, UserStatus.USER) else tokenManager.getContent(Token.parse(token))
-        return try {
-            command.execute(args + content)
-        } catch (e: Throwable) {
-            val sw = StringWriter()
-            val pw = PrintWriter(sw)
-            e.printStackTrace(pw)
-            logger.error(e.message + sw.toString())
-            CommandResult.Failure(commandName, e)
+        lock.writeLock().lock()
+        try {
+            return try {
+                command.execute(args + content)
+            } catch (e: Throwable) {
+                val sw = StringWriter()
+                val pw = PrintWriter(sw)
+                e.printStackTrace(pw)
+                logger.error(e.message + sw.toString())
+                CommandResult.Failure(commandName, e)
+            }
+        } finally {
+            lock.writeLock().unlock()
         }
     }
+
     /**
     *Updates database tables using [Database.updateTables].
      */

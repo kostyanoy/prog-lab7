@@ -39,10 +39,10 @@ class GatewayLBService(
     private val executor = Executors.newFixedThreadPool(10)
     private val responseExecutor = Executors.newCachedThreadPool()
     private val lock = ReentrantReadWriteLock()
+    private var clientAddress: InetSocketAddress? = null
 
     @Volatile
     private var currentServerIndex = 0
-
     init {
         clientServerSocketChannel.socket().bind(InetSocketAddress(clientPort))
         clientServerSocketChannel.configureBlocking(false)
@@ -70,6 +70,7 @@ class GatewayLBService(
             }
         }
     }
+
 
     /**
      * Starts the GatewayLBService.
@@ -140,7 +141,8 @@ class GatewayLBService(
             val clientChannel = clientServerSocketChannel.accept()
             clientChannel.configureBlocking(false)
             clientChannel.register(clientSelector, SelectionKey.OP_READ)
-            logger.info { "Подключился клиент: ${clientChannel.remoteAddress}" }
+            clientAddress = clientChannel.remoteAddress as InetSocketAddress
+            logger.info { "Подключился клиент: $clientAddress" }
         } catch (e: IOException) {
             logger.error("Ошибка при подключении клиента", e)
         }
