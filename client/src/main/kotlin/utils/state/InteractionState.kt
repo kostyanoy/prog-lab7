@@ -1,6 +1,7 @@
 package utils.state
 
 import Frame
+import mu.KotlinLogging
 import org.koin.core.component.KoinComponent
 import org.koin.core.component.inject
 import utils.Interactor
@@ -15,6 +16,8 @@ abstract class InteractionState(private var nextState: InteractionState? = null)
     KoinComponent {
     protected val interactor: Interactor by inject()
     protected val userManager: ReaderWriter by inject()
+    protected val logger = KotlinLogging.logger {}
+
     protected var isActive = true
 
     /**
@@ -55,9 +58,5 @@ abstract class InteractionState(private var nextState: InteractionState? = null)
      * @param frame the frame to send
      * @return frame-response
      */
-    fun sendFrame(frame: Frame): Frame {
-        val clientApp = interactor.getClient()
-        clientApp.sendFrame(frame)
-        return clientApp.receiveFrame()
-    }
+    fun sendFrame(frame: Frame): Frame = interactor.getClient().sendAndReceiveFrame(frame)
 }
