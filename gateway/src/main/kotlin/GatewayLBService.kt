@@ -143,7 +143,6 @@ class GatewayLBService(
             clientChannel.configureBlocking(false)
             clientChannel.register(clientSelector, SelectionKey.OP_READ)
             clients.add(clientChannel)
-            clientChannel.read(ByteBuffer.allocate(1))
             logger.info { "Подключился клиент: ${clientChannel.remoteAddress}" }
         } catch (e: IOException) {
             logger.error("Ошибка при подключении клиента", e)
@@ -151,7 +150,7 @@ class GatewayLBService(
     }
 
     private fun removeServer(serverChannel: SocketChannel) {
-        logger.error { "Отключаю сервер" }
+        logger.info { "Отключен сервер ${serverChannel.remoteAddress}" }
         serverChannel.close()
         servers.remove(serverChannel)
     }
@@ -166,7 +165,6 @@ class GatewayLBService(
             val c = async { servers.count() }.await()
             serverChannel.configureBlocking(false)
             serverChannel.register(serverSelector, SelectionKey.OP_READ)
-            serverChannel.read(ByteBuffer.allocate(1))
             logger.info { "Подключился сервер: ${serverChannel.remoteAddress}. Доступно серверов: $c" }
         } catch (e: IOException) {
             logger.error("Ошибка при подключении сервера", e)
@@ -174,7 +172,7 @@ class GatewayLBService(
     }
 
     private fun removeClient(clientChannel: SocketChannel) {
-        logger.error { "Отключаю клиент" }
+        logger.info { "Отключен клиент ${clientChannel.remoteAddress}" }
         clientChannel.close()
         servers.remove(clientChannel)
     }
@@ -191,9 +189,7 @@ class GatewayLBService(
             val serverDef = async { servers.getNext() }
             val request = receiveRequest(clientChannel)
             if (request.type == FrameType.EXIT) {
-                clients.remove(clientChannel)
-                clientChannel.close()
-                logger.info { "Отключен клиент ${clientChannel.remoteAddress}" }
+                removeClient(clientChannel)
                 return@withContext
             }
             request.setValue("address", clientChannel.remoteAddress.toString())
@@ -213,9 +209,7 @@ class GatewayLBService(
         try {
             val request = receiveRequest(serverChannel)
             if (request.type == FrameType.EXIT) {
-                servers.remove(serverChannel)
-                serverChannel.close()
-                logger.info { "Отключен сервер ${serverChannel.remoteAddress}" }
+                removeServer(serverChannel)
                 return@withContext
             }
             val address = request.body["address"] as? String ?: throw Exception("Сервер не передал адрес клиента")
