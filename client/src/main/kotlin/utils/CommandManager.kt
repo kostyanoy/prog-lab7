@@ -67,8 +67,7 @@ class CommandManager {
         frame.setValue("token", token)
         frame.setValue("name", command)
         frame.setValue("args", args)
-        clientApp.sendFrame(frame)
-        val respond = clientApp.receiveFrame()
+        val respond = clientApp.sendAndReceiveFrame(frame)
         return if (respond.type == FrameType.COMMAND_RESPONSE) respond.body["data"] as? CommandResult else null
     }
 

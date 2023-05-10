@@ -58,12 +58,5 @@ abstract class InteractionState(private var nextState: InteractionState? = null)
      * @param frame the frame to send
      * @return frame-response
      */
-    fun sendFrame(frame: Frame): Frame {
-        val t = System.currentTimeMillis()
-        val clientApp = interactor.getClient()
-        clientApp.sendFrame(frame)
-        val response = clientApp.receiveFrame()
-        logger.info { "Запрос занял ${System.currentTimeMillis() - t} мс" }
-        return response
-    }
+    fun sendFrame(frame: Frame): Frame = interactor.getClient().sendAndReceiveFrame(frame)
 }

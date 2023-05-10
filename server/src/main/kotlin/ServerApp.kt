@@ -64,6 +64,7 @@ class ServerApp(
      */
     fun stop() {
         if (channel.isOpen) {
+            sendResponse(Frame(FrameType.EXIT))
             channel.close()
             logger.info { "Канал закрыт" }
         }

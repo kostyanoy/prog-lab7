@@ -5,6 +5,7 @@ import org.koin.core.component.KoinComponent
 import serialize.FrameSerializer
 import java.io.IOException
 import java.net.InetSocketAddress
+import java.net.SocketException
 import java.nio.ByteBuffer
 import java.nio.channels.*
 
@@ -27,11 +28,6 @@ class GatewayLBService(
     private val serverServerSocketChannel = ServerSocketChannel.open()
     private val servers = ServerActor()
     private val clients = ClientActor()
-
-//    private val curServerLock = Mutex()
-
-//    @Volatile
-//    private var currentServerIndex = 0
 
     init {
         clientServerSocketChannel.socket().bind(InetSocketAddress(clientPort))
@@ -124,7 +120,6 @@ class GatewayLBService(
             } catch (e: CancelledKeyException) {
                 logger.error { "Кто-то не вовремя отключился" }
             }
-
         }
     }
 
@@ -134,8 +129,6 @@ class GatewayLBService(
     fun stop() {
         logger.info { "Остановка GatewayLBService..." }
         isRunning = false
-//        executor.shutdownNow()
-//        responseExecutor.shutdownNow()
         clientSelector.wakeup()
         serverSelector.wakeup()
         logger.info { "GatewayLBService остановлен" }
@@ -150,10 +143,17 @@ class GatewayLBService(
             clientChannel.configureBlocking(false)
             clientChannel.register(clientSelector, SelectionKey.OP_READ)
             clients.add(clientChannel)
+            clientChannel.read(ByteBuffer.allocate(1))
             logger.info { "Подключился клиент: ${clientChannel.remoteAddress}" }
         } catch (e: IOException) {
             logger.error("Ошибка при подключении клиента", e)
         }
+    }
+
+    private fun removeServer(serverChannel: SocketChannel) {
+        logger.error { "Отключаю сервер" }
+        serverChannel.close()
+        servers.remove(serverChannel)
     }
 
     /**
@@ -165,12 +165,18 @@ class GatewayLBService(
             servers.add(serverChannel)
             val c = async { servers.count() }.await()
             serverChannel.configureBlocking(false)
-//            val serverSelector = Selector.open()
             serverChannel.register(serverSelector, SelectionKey.OP_READ)
+            serverChannel.read(ByteBuffer.allocate(1))
             logger.info { "Подключился сервер: ${serverChannel.remoteAddress}. Доступно серверов: $c" }
         } catch (e: IOException) {
             logger.error("Ошибка при подключении сервера", e)
         }
+    }
+
+    private fun removeClient(clientChannel: SocketChannel) {
+        logger.error { "Отключаю клиент" }
+        clientChannel.close()
+        servers.remove(clientChannel)
     }
 
     /**
@@ -191,25 +197,20 @@ class GatewayLBService(
                 return@withContext
             }
             request.setValue("address", clientChannel.remoteAddress.toString())
-//            val buffer = ByteBuffer.wrap((serializer.serialize(request) + "\n").toByteArray())
-//            server.write(buffer)
             launch { sendFrame(serverDef, request) }
             val server = serverDef.await() ?: throw Exception("Нет доступных серверов")
             logger.info { "Маршрутизирован Frame к ${server.remoteAddress}" }
-//            return@withContext receiveRequest(server)
-//            val response = routeRequest(request)
-//            sendResponse(clientChannel, response)
+        } catch (e: SocketException) {
+            removeClient(clientChannel)
         } catch (e: Exception) {
             logger.error("Ошибка обработки запроса от клиента", e)
-            clients.remove(clientChannel)
-            clientChannel.close()
+            removeClient(clientChannel)
         }
     }
 
     private suspend fun handleServerRequest(key: SelectionKey) = withContext(Dispatchers.IO) {
         val serverChannel = key.channel() as SocketChannel
         try {
-//            val serverDef = async { servers.getNext() }
             val request = receiveRequest(serverChannel)
             if (request.type == FrameType.EXIT) {
                 servers.remove(serverChannel)
@@ -222,16 +223,11 @@ class GatewayLBService(
             launch { sendFrame(clientDef, request) }
             val client = clientDef.await() ?: throw Exception("Клиент $address не найден")
             logger.info { "Отправлен ответ на клиент ${client.remoteAddress}" }
-//            val buffer = ByteBuffer.wrap((serializer.serialize(request) + "\n").toByteArray())
-//            val server = serverDef.await() ?: throw Exception("Нет доступных серверов")
-//            server.write(buffer)
-//            logger.info { "Маршрутизирован Frame к ${server.remoteAddress}" }
-//            return@withContext receiveRequest(server)
-//            val response = routeRequest(request)
-//            sendResponse(clientChannel, response)
+        } catch (e: SocketException) {
+            removeServer(serverChannel)
         } catch (e: Exception) {
             logger.error("Ошибка обработки ответа от сервера", e)
-//            clientChannel.close()
+            removeServer(serverChannel)
         }
     }
 
@@ -241,15 +237,7 @@ class GatewayLBService(
     private fun receiveRequest(channel: SocketChannel): Frame {
         val strBuilder = StringBuilder()
         val buffer = ByteBuffer.allocate(1024)
-//        var tries = 0
         var num = channel.read(buffer)
-//        while (num == 0) {
-//            Thread.sleep(500)
-//            num = channel.read(buffer)
-//            tries++
-//            if (tries > 5)
-//                throw TimeoutException("Нечего читать =(")
-//        }
         while (num != 0) {
             buffer.flip()
             val len = buffer.limit() - buffer.position()
@@ -264,60 +252,10 @@ class GatewayLBService(
         return request
     }
 
-    /**
-     * Routes a [request] to an available server and returns its response.
-     */
-//    private suspend fun routeRequest(request: Frame): Frame = withContext(Dispatchers.IO) {
-////        logger.info { "Доступно серверов: ${servers.count()}" }
-////        if (servers.isEmpty()) {
-////            throw IllegalStateException("Нет доступных серверов")
-////        }
-////        val server = servers[nextIndex()]
-//        val buffer = ByteBuffer.wrap((serializer.serialize(request) + "\n").toByteArray())
-//        server.write(buffer)
-//        logger.info { "Маршрутизирован Frame к ${server.remoteAddress}" }
-//        return@withContext receiveRequest(server)
-
-
     private suspend fun sendFrame(channelDef: Deferred<SocketChannel?>, response: Frame) = withContext(Dispatchers.IO) {
         val buffer = ByteBuffer.wrap((serializer.serialize(response) + '\n').toByteArray())
         val channel = channelDef.await() ?: throw Exception("Канал не найден")
         channel.write(buffer)
         logger.info { "Отправлен frame на ${channel.remoteAddress}" }
     }
-
-    /**
-     * Returns the index of the next available server to route requests to.
-     * If there are no available servers, throws an exception.
-     *
-     * @return the index of the next available server to route requests to
-     */
-//    private fun nextIndex(): Int {
-//        if (servers.isEmpty())
-//            throw Exception("Пусто")
-//        else {
-//            while (true) {
-//                try {
-//                    curServerLock.read {
-//                        if (servers[currentServerIndex].read(ByteBuffer.allocate(1)) == -1)
-//                            throw SocketException()
-//                    }
-//                    break
-//                } catch (e: SocketException) {
-//                    curServerLock.write {
-//                        servers.removeAt(currentServerIndex)
-//                        logger.info { "Доступно серверов: ${servers.count()}" }
-//                        if (servers.isEmpty())
-//                            throw Exception("Пусто")
-//                        currentServerIndex %= servers.count()
-//                    }
-//                }
-//            }
-//            curServerLock.write {
-//                val t = currentServerIndex
-//                currentServerIndex = (currentServerIndex + 1) % servers.count()
-//                return t
-//            }
-//        }
-//    }
 }

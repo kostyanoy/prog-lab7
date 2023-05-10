@@ -48,6 +48,21 @@ class ClientApp(private val serverAddress: String, private val serverPort: Int) 
     }
 
     /**
+     * Send and receive frame-response
+     *
+     * @param frame the frame to send
+     * @return frame-response
+     */
+    fun sendAndReceiveFrame(frame: Frame): Frame {
+        val t = System.currentTimeMillis()
+        val clientApp = interactor.getClient()
+        clientApp.sendFrame(frame)
+        val response = clientApp.receiveFrame()
+        logger.info { "Запрос занял ${System.currentTimeMillis() - t} мс" }
+        return response
+    }
+
+    /**
      * Sends frame to the server
      *
      * @param frame which should be sent
