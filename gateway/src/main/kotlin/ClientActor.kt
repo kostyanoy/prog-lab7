@@ -7,13 +7,18 @@ import kotlinx.coroutines.channels.actor
 import java.nio.channels.SocketChannel
 import kotlin.coroutines.CoroutineContext
 
+/**
+ * Possible commands to the client actor
+ */
 sealed class ClientCommand {
     class Add(val channel: SocketChannel) : ClientCommand()
     class Remove(val channel: SocketChannel) : ClientCommand()
     class Get(val address: String, val response: CompletableDeferred<SocketChannel?>) : ClientCommand()
 }
 
-
+/**
+ * Encapsulates map of connected clients. Makes it possible to use map async and in order
+ */
 class ClientActor(coroutineContext: CoroutineContext = Dispatchers.Unconfined) {
 
     private val scope = CoroutineScope(coroutineContext)
@@ -30,9 +35,19 @@ class ClientActor(coroutineContext: CoroutineContext = Dispatchers.Unconfined) {
         }
     }
 
+    /**
+     * Add connected client
+     */
     fun add(channel: SocketChannel) = commands.trySend(ClientCommand.Add(channel))
+
+    /**
+     * Remove known client
+     */
     fun remove(channel: SocketChannel) = commands.trySend(ClientCommand.Remove(channel))
 
+    /**
+     * @return client channel from remote address
+     */
     suspend fun get(address: String): SocketChannel? {
         val get = ClientCommand.Get(address, CompletableDeferred())
         commands.send(get)

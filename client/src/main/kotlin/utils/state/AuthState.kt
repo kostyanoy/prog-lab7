@@ -7,7 +7,7 @@ import FrameType
 /**
  * Authentication state: register and login
  */
-class AuthState : InteractionState(UpdateState()) {
+class AuthState : InteractionState(CommandsState()) {
     override fun start() {
         while (isActive) {
             userManager.writeLine("Для авторизации используйте команду login или register")

@@ -11,6 +11,9 @@ import java.nio.channels.SocketChannel
 import kotlin.coroutines.CoroutineContext
 
 
+/**
+ * Possible commands to the server actor
+ */
 sealed class ServerCommand {
     class Add(val channel: SocketChannel) : ServerCommand()
     class Remove(val channel: SocketChannel) : ServerCommand()
@@ -18,7 +21,9 @@ sealed class ServerCommand {
     class GetNext(val response: CompletableDeferred<SocketChannel?>) : ServerCommand()
 }
 
-
+/**
+ * Encapsulates list of connected servers. Makes it possible to use map async and in order
+ */
 class ServerActor(coroutineContext: CoroutineContext = Dispatchers.IO) {
 
     private val logger = KotlinLogging.logger {}
@@ -63,15 +68,28 @@ class ServerActor(coroutineContext: CoroutineContext = Dispatchers.IO) {
     }
 
 
+    /**
+     * Add connected client
+     */
     fun add(channel: SocketChannel) = commands.trySend(ServerCommand.Add(channel))
+
+    /**
+     * Remove known client
+     */
     fun remove(channel: SocketChannel) = commands.trySend(ServerCommand.Remove(channel))
 
+    /**
+     * Count connected servers
+     */
     suspend fun count(): Int {
         val count = ServerCommand.Count(CompletableDeferred())
         commands.send(count)
         return count.response.await()
     }
 
+    /**
+     * Get next server to process the request
+     */
     suspend fun getNext(): SocketChannel? {
         val get = ServerCommand.GetNext(CompletableDeferred())
         commands.send(get)

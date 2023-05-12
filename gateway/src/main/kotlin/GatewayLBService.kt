@@ -131,6 +131,8 @@ class GatewayLBService(
         isRunning = false
         clientSelector.wakeup()
         serverSelector.wakeup()
+        clientSelector.close()
+        serverSelector.close()
         logger.info { "GatewayLBService остановлен" }
     }
 
@@ -149,6 +151,11 @@ class GatewayLBService(
         }
     }
 
+    /**
+     * Removes server from the connected list
+     *
+     * @param serverChannel server's channel
+     */
     private fun removeServer(serverChannel: SocketChannel) {
         logger.info { "Отключен сервер ${serverChannel.remoteAddress}" }
         serverChannel.close()
@@ -162,19 +169,25 @@ class GatewayLBService(
         try {
             val serverChannel = serverServerSocketChannel.accept()
             servers.add(serverChannel)
-            val c = async { servers.count() }.await()
+            val countDef = async { servers.count() }
             serverChannel.configureBlocking(false)
             serverChannel.register(serverSelector, SelectionKey.OP_READ)
-            logger.info { "Подключился сервер: ${serverChannel.remoteAddress}. Доступно серверов: $c" }
+            val count = countDef.await()
+            logger.info { "Подключился сервер: ${serverChannel.remoteAddress}. Доступно серверов: $count" }
         } catch (e: IOException) {
             logger.error("Ошибка при подключении сервера", e)
         }
     }
 
+    /**
+     * Removes client from the connected list
+     *
+     * @param clientChannel client's channel
+     */
     private fun removeClient(clientChannel: SocketChannel) {
         logger.info { "Отключен клиент ${clientChannel.remoteAddress}" }
+        clients.remove(clientChannel)
         clientChannel.close()
-        servers.remove(clientChannel)
     }
 
     /**
@@ -204,6 +217,11 @@ class GatewayLBService(
         }
     }
 
+    /**
+     * Handles a request received from a server.
+     *
+     * @param [key] the selection key associated with the server channel.
+     */
     private suspend fun handleServerRequest(key: SelectionKey) = withContext(Dispatchers.IO) {
         val serverChannel = key.channel() as SocketChannel
         try {
@@ -246,6 +264,11 @@ class GatewayLBService(
         return request
     }
 
+    /**
+     * Send a [Frame] to the given channel. Awaits for it
+     *
+     * @param channelDef the deferred value of channel so frame could be serialized async
+     */
     private suspend fun sendFrame(channelDef: Deferred<SocketChannel?>, response: Frame) = withContext(Dispatchers.IO) {
         val buffer = ByteBuffer.wrap((serializer.serialize(response) + '\n').toByteArray())
         val channel = channelDef.await() ?: throw Exception("Канал не найден")

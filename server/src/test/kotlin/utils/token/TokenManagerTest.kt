@@ -28,10 +28,10 @@ class TokenManagerTest : KoinTest {
     private val myModule = module {
         single {
             val m = mockk<FileManager>()
-            every { m.readFile(".key") } returns "aboba"
+            every { m.readFile("utils/database/.key") } returns "aboba"
             m
         }
-        single { TokenManager(EncryptManager(MessageDigest.getInstance("SHA-384"), get(), ".key")) }
+        single { TokenManager(EncryptManager(MessageDigest.getInstance("SHA-384"), get(), "utils/database/.key")) }
     }
 
     private val content = Content(1, UserStatus.USER)
