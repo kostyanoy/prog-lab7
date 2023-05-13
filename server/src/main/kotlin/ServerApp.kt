@@ -8,9 +8,7 @@ import utils.auth.token.Content
 import utils.auth.token.Token
 import utils.auth.token.Tokenizer
 import utils.database.Database
-import java.io.IOException
-import java.io.PrintWriter
-import java.io.StringWriter
+import java.io.*
 import java.net.ConnectException
 import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
@@ -38,7 +36,7 @@ class ServerApp(
     private val executor = Executors.newFixedThreadPool(10)
     private val responseExecutor = Executors.newCachedThreadPool()
     private val lock = ReentrantReadWriteLock()
-    private val addressQueue: BlockingQueue<String> = LinkedBlockingQueue()
+    private val requestQueue: BlockingQueue<Frame> = LinkedBlockingQueue()
 
     /**
      * Starts the server and listens for incoming client requests.
@@ -48,14 +46,12 @@ class ServerApp(
             channel = SocketChannel.open()
             channel.socket().connect(InetSocketAddress(gatewayAddress, gatewayPort), 5000)
             logger.info { "Подключено к GatewayLBService: $gatewayAddress:$gatewayPort" }
+            senderThread()
             while (isActive) {
                 try {
-                    val request = receiveFromGatewayLBService()
-                    val clientAddress = request.body["address"] as String
-                    addressQueue.add(clientAddress)
-                    val response = serverRequest(request)
-                    responseExecutor.execute {
-                        sendResponse(response)
+                    executor.execute {
+                        val request = receiveFromGatewayLBService()
+                        requestQueue.offer(request)
                     }
                 } catch (e: IOException) {
                     logger.error { e }
@@ -70,20 +66,37 @@ class ServerApp(
         }
     }
 
-
     /**
-    Stops the server
+     * Stops the server.
      */
     fun stop() {
         if (channel.isOpen) {
-            sendResponse(Frame(FrameType.EXIT))
+            val response = Frame(FrameType.EXIT)
+            sendResponse(response, null)
             channel.close()
             logger.info { "Канал закрыт" }
         }
     }
+
     /**
-    *Receives a frame from the GatewayLBService.
+     *Receives a frame from the GatewayLBService.
      */
+    private fun senderThread() {
+        val thread = Thread {
+            while (isActive) {
+                try {
+                    val request = requestQueue.take()
+                    val response = serverRequest(request)
+                    responseExecutor.execute {
+                        sendResponse(response, request.body["address"] as String?)
+                    }
+                } catch (e: InterruptedException) {
+                    logger.error { e }
+                }
+            }
+        }
+        thread.start()
+    }
     private fun receiveFromGatewayLBService(): Frame {
         val array = ArrayList<Byte>()
         logger.info { "Ожидаем запроса..." }
@@ -149,15 +162,18 @@ class ServerApp(
         } catch (e: Exception) {
             val response = Frame(FrameType.COMMAND_RESPONSE)
             response.setValue("data", "Произошла ошибка: ${e.message}")
-            response
+            return response
         }
     }
 
     /**
-    *Sends the provided [response] to the gateway.
-    *@param response [Frame] object to be sent.
+     *Sends the provided [response] to the gateway.
+     *@param response [Frame] object to be sent.
      */
-    private fun sendResponse(response: Frame) {
+    private fun sendResponse(response: Frame, address: String?) {
+        if (address != null) {
+            response.setValue("address", address)
+        }
         val serializedResponse = (frameSerializer.serialize(response) + "\n").toByteArray()
         val buffer = ByteBuffer.wrap(serializedResponse)
         channel.write(buffer)
@@ -165,8 +181,8 @@ class ServerApp(
     }
 
     /**
-    *Executes a command with the specified name and arguments, and returns the result.
-    *@param [token] the authorization token to use when executing the command.
+     *Executes a command with the specified name and arguments, and returns the result.
+     *@param [token] the authorization token to use when executing the command.
      */
     private fun execute(commandName: String, args: Array<Any>, token: String): CommandResult {
         val command = commandManager.getCommand(commandName)
@@ -188,7 +204,7 @@ class ServerApp(
     }
 
     /**
-    *Updates database tables using [Database.updateTables].
+     *Updates database tables using [Database.updateTables].
      */
     fun updateTables() {
         val database: Database by inject()
