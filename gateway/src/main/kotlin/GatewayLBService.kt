@@ -139,7 +139,7 @@ class GatewayLBService(
     /**
      * Accepts a new client connection and registers it for reading.
      */
-    private suspend fun connectToClient() = withContext(Dispatchers.IO) {
+    private fun connectToClient() {
         try {
             val clientChannel = clientServerSocketChannel.accept()
             clientChannel.configureBlocking(false)
@@ -158,8 +158,8 @@ class GatewayLBService(
      */
     private fun removeServer(serverChannel: SocketChannel) {
         logger.info { "Отключен сервер ${serverChannel.remoteAddress}" }
-        serverChannel.close()
         servers.remove(serverChannel)
+        serverChannel.close()
     }
 
     /**
@@ -172,8 +172,7 @@ class GatewayLBService(
             val countDef = async { servers.count() }
             serverChannel.configureBlocking(false)
             serverChannel.register(serverSelector, SelectionKey.OP_READ)
-            val count = countDef.await()
-            logger.info { "Подключился сервер: ${serverChannel.remoteAddress}. Доступно серверов: $count" }
+            logger.info("Подключился сервер: ${serverChannel.remoteAddress}. Доступно серверов: ${countDef.await()}")
         } catch (e: IOException) {
             logger.error("Ошибка при подключении сервера", e)
         }
@@ -203,6 +202,7 @@ class GatewayLBService(
             val request = receiveRequest(clientChannel)
             if (request.type == FrameType.EXIT) {
                 removeClient(clientChannel)
+                serverDef.cancel()
                 return@withContext
             }
             request.setValue("address", clientChannel.remoteAddress.toString())

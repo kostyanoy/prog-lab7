@@ -1,14 +1,12 @@
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
 import mu.KotlinLogging
 import kotlin.concurrent.thread
 
 /**
  * Main function that starts the application
  */
-fun main(args: Array<String>) = runBlocking{
-
+fun main(args: Array<String>) = runBlocking(Dispatchers.IO) {
     val logger = KotlinLogging.logger {}
 
     var clientPort = 2228
@@ -34,7 +32,5 @@ fun main(args: Array<String>) = runBlocking{
         }
     }
     gateway.start()
-    withContext(Dispatchers.IO) {
-        console.join()
-    }
+    console.join()
 }

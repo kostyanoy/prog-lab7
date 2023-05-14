@@ -18,7 +18,7 @@ class AuthState : InteractionState(CommandsState()) {
                     }
                 }
 
-                "exit" -> stop()
+                "exit" -> setState(ExitState())
             }
         }
     }
