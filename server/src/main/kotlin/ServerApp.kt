@@ -10,9 +10,6 @@ import utils.auth.token.Tokenizer
 import utils.database.Database
 import utils.database.tables.Bands
 import utils.database.tables.Users
-import java.io.*
-import utils.database.tables.Bands
-import utils.database.tables.Users
 import utils.database.updateTables
 import java.io.IOException
 import java.io.PrintWriter
@@ -26,7 +23,6 @@ import java.util.concurrent.BlockingQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.locks.ReentrantReadWriteLock
-import kotlin.concurrent.read
 import kotlin.concurrent.write
 
 /**
@@ -48,6 +44,7 @@ class ServerApp(
     private val lock = ReentrantReadWriteLock()
     private val requestQueue: BlockingQueue<Frame> = LinkedBlockingQueue()
     private val readLock = ReentrantReadWriteLock().readLock()
+
     /**
      * Starts the server and listens for incoming client requests.
      */
@@ -56,32 +53,32 @@ class ServerApp(
             channel = SocketChannel.open()
             channel.socket().connect(InetSocketAddress(gatewayAddress, gatewayPort), 5000)
             logger.info { "Подключено к GatewayLBService: $gatewayAddress:$gatewayPort" }
-                val receiveThread = Thread {
-                    while (isActive) {
-                        try {
-                            val request = receiveFromGatewayLBService()
-                            requestQueue.offer(request)
-                        } catch (e: IOException) {
-                            logger.error { e }
-                            channel.close()
-                            isActive = false
-                        }
+            val receiveThread = Thread {
+                while (isActive) {
+                    try {
+                        val request = receiveFromGatewayLBService()
+                        requestQueue.offer(request)
+                    } catch (e: IOException) {
+                        logger.error { e }
+                        channel.close()
+                        isActive = false
                     }
                 }
-                receiveThread.start()
+            }
+            receiveThread.start()
 
-                val processThread = Thread {
-                    while (isActive) {
-                        val request = requestQueue.take()
-                        executor.execute {
-                            val response = serverRequest(request)
-                            responseExecutor.execute {
-                                sendResponse(response, request.body["address"] as String?)
-                            }
+            val processThread = Thread {
+                while (isActive) {
+                    val request = requestQueue.take()
+                    executor.execute {
+                        val response = serverRequest(request)
+                        responseExecutor.execute {
+                            sendResponse(response, request.body["address"] as String?)
                         }
                     }
                 }
-                processThread.start()
+            }
+            processThread.start()
 
         } catch (e: SocketTimeoutException) {
             logger.info { "GatewayLBService не отвечает (${e.message})" }
@@ -94,6 +91,9 @@ class ServerApp(
      * Stops the server.
      */
     fun stop() {
+        isActive = false
+        executor.shutdown()
+        responseExecutor.shutdown()
         if (channel.isOpen) {
             val response = Frame(FrameType.EXIT)
             sendResponse(response, null)
@@ -118,7 +118,7 @@ class ServerApp(
                 char = channel.socket().getInputStream().read()
             }
             val str = String(array.toByteArray())
-            logger.info { "$str" }
+            logger.info { str }
             val frame = frameSerializer.deserialize(str)
             logger.info { "Получен ответ от GatewayLBService ${frame.type}" }
             return frame
@@ -135,45 +135,45 @@ class ServerApp(
      *
      */
     private fun serverRequest(request: Frame): Frame {
-        return try {
-                when (request.type) {
-                    FrameType.COMMAND_REQUEST -> {
-                        val response = Frame(FrameType.COMMAND_RESPONSE)
-                        val result = execute(
-                            request.body["name"] as String,
-                            request.body["args"] as Array<Any>,
-                            request.body["token"] as String
-                        )
-                        response.setValue("data", result)
-                        request.body["address"]?.let { response.setValue("address", it) }
-                        return response
-                    }
+        try {
+            when (request.type) {
+                FrameType.COMMAND_REQUEST -> {
+                    val response = Frame(FrameType.COMMAND_RESPONSE)
+                    val result = execute(
+                        request.body["name"] as String,
+                        request.body["args"] as Array<Any>,
+                        request.body["token"] as String
+                    )
+                    response.setValue("data", result)
+                    request.body["address"]?.let { response.setValue("address", it) }
+                    return response
+                }
 
-                    FrameType.LIST_OF_COMMANDS_REQUEST -> {
-                        val response = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
-                        val commands = commandManager.commands.mapValues { it.value.getArgumentTypes() }.toMap()
-                        response.setValue("commands", commands)
-                        request.body["address"]?.let { response.setValue("address", it) }
-                        return response
-                    }
+                FrameType.LIST_OF_COMMANDS_REQUEST -> {
+                    val response = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
+                    val commands = commandManager.commands.mapValues { it.value.getArgumentTypes() }.toMap()
+                    response.setValue("commands", commands)
+                    request.body["address"]?.let { response.setValue("address", it) }
+                    return response
+                }
 
-                    FrameType.AUTHORIZE_REQUEST -> {
-                        val response = Frame(FrameType.AUTHORIZE_RESPONSE)
-                        val result = execute(
-                            request.body["type"] as String,
-                            arrayOf(request.body["login"] as String, request.body["password"] as String),
-                            ""
-                        )
-                        response.setValue("data", result)
-                        request.body["address"]?.let { response.setValue("address", it) }
-                        return response
-                    }
+                FrameType.AUTHORIZE_REQUEST -> {
+                    val response = Frame(FrameType.AUTHORIZE_RESPONSE)
+                    val result = execute(
+                        request.body["type"] as String,
+                        arrayOf(request.body["login"] as String, request.body["password"] as String),
+                        ""
+                    )
+                    response.setValue("data", result)
+                    request.body["address"]?.let { response.setValue("address", it) }
+                    return response
+                }
 
-                    else -> {
-                        val response = Frame(FrameType.ERROR)
-                        response.setValue("error", "Неверный тип запроса")
-                        return response
-                    }
+                else -> {
+                    val response = Frame(FrameType.ERROR)
+                    response.setValue("error", "Неверный тип запроса")
+                    return response
+                }
             }
         } catch (e: Exception) {
             val response = Frame(FrameType.COMMAND_RESPONSE)

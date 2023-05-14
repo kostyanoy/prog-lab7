@@ -37,4 +37,5 @@ fun main(args: Array<String>) {
         }
     }
     server.start()
+    console.join()
 }
