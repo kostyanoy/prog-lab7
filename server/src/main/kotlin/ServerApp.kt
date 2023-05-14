@@ -18,6 +18,8 @@ import java.util.concurrent.BlockingQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.locks.ReentrantReadWriteLock
+import kotlin.concurrent.read
+import kotlin.concurrent.write
 
 /**
  * The ServerApp class represents the server application that listens to incoming client requests,executes them and sends back the response.
@@ -37,7 +39,7 @@ class ServerApp(
     private val responseExecutor = Executors.newCachedThreadPool()
     private val lock = ReentrantReadWriteLock()
     private val requestQueue: BlockingQueue<Frame> = LinkedBlockingQueue()
-
+    private val readLock = ReentrantReadWriteLock().readLock()
     /**
      * Starts the server and listens for incoming client requests.
      */
@@ -46,26 +48,39 @@ class ServerApp(
             channel = SocketChannel.open()
             channel.socket().connect(InetSocketAddress(gatewayAddress, gatewayPort), 5000)
             logger.info { "Подключено к GatewayLBService: $gatewayAddress:$gatewayPort" }
-            senderThread()
-            while (isActive) {
-                try {
-                    executor.execute {
-                        val request = receiveFromGatewayLBService()
-                        requestQueue.offer(request)
+                val receiveThread = Thread {
+                    while (isActive) {
+                        try {
+                            val request = receiveFromGatewayLBService()
+                            requestQueue.offer(request)
+                        } catch (e: IOException) {
+                            logger.error { e }
+                            channel.close()
+                            isActive = false
+                        }
                     }
-                } catch (e: IOException) {
-                    logger.error { e }
-                    channel.close()
-                    isActive = false
                 }
-            }
+                receiveThread.start()
+
+                val processThread = Thread {
+                    while (isActive) {
+                        val request = requestQueue.take()
+                        executor.execute {
+                            val response = serverRequest(request)
+                            responseExecutor.execute {
+                                sendResponse(response, request.body["address"] as String?)
+                            }
+                        }
+                    }
+                }
+                processThread.start()
+
         } catch (e: SocketTimeoutException) {
             logger.info { "GatewayLBService не отвечает (${e.message})" }
         } catch (e: ConnectException) {
             logger.info { "Не удается подключиться к GatewayLBService (${e.message})" }
         }
     }
-
     /**
      * Stops the server.
      */
@@ -81,35 +96,29 @@ class ServerApp(
     /**
      *Receives a frame from the GatewayLBService.
      */
-    private fun senderThread() {
-        val thread = Thread {
-            while (isActive) {
-                try {
-                    val request = requestQueue.take()
-                    val response = serverRequest(request)
-                    responseExecutor.execute {
-                        sendResponse(response, request.body["address"] as String?)
-                    }
-                } catch (e: InterruptedException) {
-                    logger.error { e }
-                }
-            }
-        }
-        thread.start()
-    }
+
+
     private fun receiveFromGatewayLBService(): Frame {
         val array = ArrayList<Byte>()
         logger.info { "Ожидаем запроса..." }
-        var char = channel.socket().getInputStream().read()
-        while (char.toChar() != '\n') {
-            array.add(char.toByte())
-            char = channel.socket().getInputStream().read()
+        readLock.lock()
+        try {
+            var char = channel.socket().getInputStream().read()
+            while (char.toChar() != '\n') {
+                array.add(char.toByte())
+                char = channel.socket().getInputStream().read()
+            }
+            val str = String(array.toByteArray())
+            logger.info { "$str" }
+            val frame = frameSerializer.deserialize(str)
+            logger.info { "Получен ответ от GatewayLBService ${frame.type}" }
+            return frame
+        } finally {
+            readLock.unlock()
         }
-        val str = String(array.toByteArray())
-        val frame = frameSerializer.deserialize(str)
-        logger.info { "Получен ответ от GatewayLBService ${frame.type}" }
-        return frame
     }
+
+
 
     /**
      * Processes a client request and returns a response frame.
@@ -120,44 +129,44 @@ class ServerApp(
      */
     private fun serverRequest(request: Frame): Frame {
         return try {
-            when (request.type) {
-                FrameType.COMMAND_REQUEST -> {
-                    val response = Frame(FrameType.COMMAND_RESPONSE)
-                    val result = execute(
-                        request.body["name"] as String,
-                        request.body["args"] as Array<Any>,
-                        request.body["token"] as String
-                    )
-                    response.setValue("data", result)
-                    request.body["address"]?.let { response.setValue("address", it) }
-                    return response
-                }
+                when (request.type) {
+                    FrameType.COMMAND_REQUEST -> {
+                        val response = Frame(FrameType.COMMAND_RESPONSE)
+                        val result = execute(
+                            request.body["name"] as String,
+                            request.body["args"] as Array<Any>,
+                            request.body["token"] as String
+                        )
+                        response.setValue("data", result)
+                        request.body["address"]?.let { response.setValue("address", it) }
+                        return response
+                    }
 
-                FrameType.LIST_OF_COMMANDS_REQUEST -> {
-                    val response = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
-                    val commands = commandManager.commands.mapValues { it.value.getArgumentTypes() }.toMap()
-                    response.setValue("commands", commands)
-                    request.body["address"]?.let { response.setValue("address", it) }
-                    return response
-                }
+                    FrameType.LIST_OF_COMMANDS_REQUEST -> {
+                        val response = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
+                        val commands = commandManager.commands.mapValues { it.value.getArgumentTypes() }.toMap()
+                        response.setValue("commands", commands)
+                        request.body["address"]?.let { response.setValue("address", it) }
+                        return response
+                    }
 
-                FrameType.AUTHORIZE_REQUEST -> {
-                    val response = Frame(FrameType.AUTHORIZE_RESPONSE)
-                    val result = execute(
-                        request.body["type"] as String,
-                        arrayOf(request.body["login"] as String, request.body["password"] as String),
-                        ""
-                    )
-                    response.setValue("data", result)
-                    request.body["address"]?.let { response.setValue("address", it) }
-                    return response
-                }
+                    FrameType.AUTHORIZE_REQUEST -> {
+                        val response = Frame(FrameType.AUTHORIZE_RESPONSE)
+                        val result = execute(
+                            request.body["type"] as String,
+                            arrayOf(request.body["login"] as String, request.body["password"] as String),
+                            ""
+                        )
+                        response.setValue("data", result)
+                        request.body["address"]?.let { response.setValue("address", it) }
+                        return response
+                    }
 
-                else -> {
-                    val response = Frame(FrameType.ERROR)
-                    response.setValue("error", "Неверный тип запроса")
-                    return response
-                }
+                    else -> {
+                        val response = Frame(FrameType.ERROR)
+                        response.setValue("error", "Неверный тип запроса")
+                        return response
+                    }
             }
         } catch (e: Exception) {
             val response = Frame(FrameType.COMMAND_RESPONSE)
@@ -166,9 +175,12 @@ class ServerApp(
         }
     }
 
+
     /**
-     *Sends the provided [response] to the gateway.
-     *@param response [Frame] object to be sent.
+     * Sends the provided [response] to the gateway.
+     *
+     * @param response [Frame] object to be sent.
+     * @param address the address to include in the response frame.
      */
     private fun sendResponse(response: Frame, address: String?) {
         if (address != null) {
@@ -176,9 +188,18 @@ class ServerApp(
         }
         val serializedResponse = (frameSerializer.serialize(response) + "\n").toByteArray()
         val buffer = ByteBuffer.wrap(serializedResponse)
-        channel.write(buffer)
-        logger.info { "Отправлен Frame ${response.type}" }
+        try {
+            lock.write {
+                channel.write(buffer)
+                logger.info { "Отправлен Frame ${response.type}" }
+            }
+        } catch (e: IOException) {
+            logger.error(e) { "Ошибка при отправке ответа: ${e.message}" }
+            channel.close()
+            isActive = false
+        }
     }
+
 
     /**
      *Executes a command with the specified name and arguments, and returns the result.
