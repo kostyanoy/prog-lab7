@@ -31,6 +31,7 @@ class FileManager {
      */
     fun readFile(path: String): String {
         if (!File(path).canRead()) {
+            println(System.getProperty("user.dir"))
             throw FileException("Не получается открыть файл: $path")
         }
         val scanner = Scanner(File(path))

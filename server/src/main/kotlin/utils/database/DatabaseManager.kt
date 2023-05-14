@@ -3,6 +3,7 @@ package utils.database
 import FileManager
 import com.zaxxer.hikari.HikariConfig
 import com.zaxxer.hikari.HikariDataSource
+import mu.KotlinLogging
 import org.jetbrains.exposed.sql.Database
 import java.sql.Connection
 import utils.database.Database as MyDatabase
@@ -13,12 +14,15 @@ import utils.database.Database as MyDatabase
  * @param host the host of database on the server
  * @param port the port of database
  * @param db the name of the database on the server
+ * @param fileManager reads files
+ * @param path path to .pgpass
  */
 class DatabaseManager(
     private val host: String = "localhost",
     private val port: String = "5432",
     private val db: String = "studs",
-    private val fileManager: FileManager
+    private val fileManager: FileManager,
+    private val path: String = ".pgpass"
 ) : MyDatabase {
     private val config = HikariConfig().apply {
         driverClassName = "org.postgresql.Driver"
@@ -27,11 +31,14 @@ class DatabaseManager(
         password = parsePassword()
     }
     private var dataSource: HikariDataSource? = null
+
+    private val logger = KotlinLogging.logger { }
     
     override fun getConnection(): Connection = getDataSource().connection
 
     override fun close() {
         dataSource?.close()
+        logger.info { "Закрыл подключение к базе данных" }
     }
 
     /**
@@ -41,6 +48,7 @@ class DatabaseManager(
      */
     private fun getDataSource(): HikariDataSource {
         if (dataSource == null || dataSource!!.isClosed) {
+            logger.info { "Открыл подключение к базе данных" }
             dataSource = HikariDataSource(config)
             Database.connect(dataSource!!)
         }
@@ -52,7 +60,7 @@ class DatabaseManager(
      *
      * @return username
      */
-    private fun parseUser(file: String = ".pgpass"): String {
+    private fun parseUser(file: String = path): String {
         val line = fileManager.readFile(file).split(":")
         return line[3]
     }
@@ -62,7 +70,7 @@ class DatabaseManager(
      *
      * @return password
      */
-    private fun parsePassword(file: String = ".pgpass"): String {
+    private fun parsePassword(file: String = path): String {
         val line = fileManager.readFile(file).split(":")
         return line[4]
     }

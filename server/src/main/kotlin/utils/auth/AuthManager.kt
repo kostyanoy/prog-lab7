@@ -4,14 +4,12 @@ import exceptions.CommandException
 import org.jetbrains.exposed.sql.and
 import org.jetbrains.exposed.sql.insertAndGetId
 import org.jetbrains.exposed.sql.select
-import org.jetbrains.exposed.sql.transactions.transaction
 import utils.auth.token.Content
 import utils.auth.token.Token
 import utils.auth.token.Tokenizer
 import utils.database.Database
+import utils.database.makeTransaction
 import utils.database.tables.Users
-import java.sql.Connection
-import java.sql.SQLException
 
 /**
  * Do authorizations: register, login and generates tokens
@@ -38,13 +36,12 @@ class AuthManager(
         if (isUserExists(login)) {
             throw CommandException("Пользователь с таким логином уже существует")
         }
-        val userId = getConnection().use {
-            transaction {
-                Users.insertAndGetId {
-                    it[Users.login] = login
-                    it[Users.password] = encrypter.encrypt(password)
-                    it[status] = userStatus
-                }
+        val encryptedPassword = encrypter.encrypt(password)
+        val userId = database.makeTransaction {
+            Users.insertAndGetId {
+                it[Users.login] = login
+                it[Users.password] = encryptedPassword
+                it[status] = userStatus
             }
         }
         return tokenManager.createToken(Content(userId.value, userStatus))
@@ -59,16 +56,12 @@ class AuthManager(
      * @throws CommandException if login not exists
      */
     fun login(login: String, password: String): Token {
-        if (!isUserExists(login)) {
-            throw CommandException("Пользователя с таким логином не существует")
-        }
         val encryptedPassword = encrypter.encrypt(password)
-        val user = getConnection().use {
-            transaction {
-                Users.select { (Users.login eq login) and (Users.password eq encryptedPassword) }
-                    .single()
-            }
-        }
+        val user = database.makeTransaction {
+            Users.select { (Users.login eq login) and (Users.password eq encryptedPassword) }
+                .singleOrNull()
+        } ?: throw CommandException("Неправильный логин или пароль")
+
         return tokenManager.createToken(Content(user[Users.id].value, user[Users.status]))
     }
 
@@ -78,22 +71,10 @@ class AuthManager(
      * @param login of user
      * @return true if login used
      */
-    fun isUserExists(login: String): Boolean = getConnection().use {
-        val user = transaction {
+    fun isUserExists(login: String): Boolean {
+        val user = database.makeTransaction {
             Users.select { Users.login eq login }.singleOrNull()
         }
         return user != null
-    }
-
-    /**
-     * @return connection to database
-     * @throws CommandException if no connections
-     */
-    private fun getConnection(): Connection {
-        try {
-            return database.getConnection()
-        } catch (e: SQLException) {
-            throw CommandException("Не удалось получить подключение к базе данных + ${e.message}")
-        }
     }
 }

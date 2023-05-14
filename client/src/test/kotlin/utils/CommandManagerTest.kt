@@ -13,18 +13,16 @@ import org.junit.jupiter.api.TestInstance
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class CommandManagerTest {
-    private val client: ClientApp = mockk<ClientApp>(relaxed = true)
+    private val client: ClientApp = mockk(relaxed = true)
 
     @Test
     fun `UpdateCommands return false if wrong frame type`() {
         val frame = Frame(FrameType.COMMAND_REQUEST)
         frame.setValue("commands", mapOf("command" to arrayOf(ArgumentType.INT)))
 
-        every { client.receiveFrame() } returns frame
-
         val commandManager = CommandManager()
 
-        assertFalse(commandManager.updateCommands(client))
+        assertFalse(commandManager.updateCommands(frame))
     }
 
     @Test
@@ -32,11 +30,11 @@ class CommandManagerTest {
         val frame = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
         frame.setValue("wrong", mapOf("command" to arrayOf(ArgumentType.INT)))
 
-        every { client.receiveFrame() } returns frame
+        every { client.sendAndReceiveFrame(any()) } returns frame
 
         val commandManager = CommandManager()
 
-        assertFalse(commandManager.updateCommands(client))
+        assertFalse(commandManager.updateCommands(frame))
     }
 
     @Test
@@ -44,11 +42,11 @@ class CommandManagerTest {
         val frame = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
         frame.setValue("commands", mapOf("command" to arrayOf(ArgumentType.INT)))
 
-        every { client.receiveFrame() } returns frame
+        every { client.sendAndReceiveFrame(any()) } returns frame
 
         val commandManager = CommandManager()
 
-        assertTrue(commandManager.updateCommands(client))
+        assertTrue(commandManager.updateCommands(frame))
     }
 
     @Test
@@ -57,11 +55,11 @@ class CommandManagerTest {
         val res = CommandResult.Success("command", "message")
         frame.setValue("data", res)
 
-        every { client.receiveFrame() } returns frame
+        every { client.sendAndReceiveFrame(any()) } returns frame
 
         val commandManager = CommandManager()
 
-        assertEquals(null, commandManager.executeCommand(client, "command", arrayOf(1)))
+        assertEquals(null, commandManager.executeCommand(client, "token", "command", arrayOf(1)))
     }
 
     @Test
@@ -69,11 +67,11 @@ class CommandManagerTest {
         val frame = Frame(FrameType.LIST_OF_COMMANDS_RESPONSE)
         frame.setValue("data", "sas")
 
-        every { client.receiveFrame() } returns frame
+        every { client.sendAndReceiveFrame(any()) } returns frame
 
         val commandManager = CommandManager()
 
-        assertEquals(null, commandManager.executeCommand(client, "command", arrayOf(1)))
+        assertEquals(null, commandManager.executeCommand(client, "token", "command", arrayOf(1)))
     }
 
     @Test
@@ -82,11 +80,11 @@ class CommandManagerTest {
         val res = CommandResult.Success("command", "message")
         frame.setValue("data", res)
 
-        every { client.receiveFrame() } returns frame
+        every { client.sendAndReceiveFrame(any()) } returns frame
 
         val commandManager = CommandManager()
 
-        assertEquals(res, commandManager.executeCommand(client, "command", arrayOf(1)))
+        assertEquals(res, commandManager.executeCommand(client, "token", "command", arrayOf(1)))
     }
 
 

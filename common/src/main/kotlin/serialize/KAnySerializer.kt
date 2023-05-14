@@ -99,7 +99,7 @@ object KAnySerializer : KSerializer<Any> {
                 ArraySerializer(KAnySerializer), jsonElement
             )
 
-            //too hard to check so just be a else branch ;)
+            //too hard to check so just be an else branch ;)
             //Map<Any>
             else -> jsonDecoder.json.decodeFromJsonElement(
                 MapSerializer(

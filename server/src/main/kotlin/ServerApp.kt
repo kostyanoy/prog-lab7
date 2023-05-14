@@ -8,7 +8,15 @@ import utils.auth.token.Content
 import utils.auth.token.Token
 import utils.auth.token.Tokenizer
 import utils.database.Database
+import utils.database.tables.Bands
+import utils.database.tables.Users
 import java.io.*
+import utils.database.tables.Bands
+import utils.database.tables.Users
+import utils.database.updateTables
+import java.io.IOException
+import java.io.PrintWriter
+import java.io.StringWriter
 import java.net.ConnectException
 import java.net.InetSocketAddress
 import java.net.SocketTimeoutException
@@ -81,6 +89,7 @@ class ServerApp(
             logger.info { "Не удается подключиться к GatewayLBService (${e.message})" }
         }
     }
+
     /**
      * Stops the server.
      */
@@ -89,15 +98,15 @@ class ServerApp(
             val response = Frame(FrameType.EXIT)
             sendResponse(response, null)
             channel.close()
+            val db: Database by inject()
+            db.close()
             logger.info { "Канал закрыт" }
         }
     }
 
     /**
-     *Receives a frame from the GatewayLBService.
+     * Receives a frame from the GatewayLBService.
      */
-
-
     private fun receiveFromGatewayLBService(): Frame {
         val array = ArrayList<Byte>()
         logger.info { "Ожидаем запроса..." }
@@ -117,8 +126,6 @@ class ServerApp(
             readLock.unlock()
         }
     }
-
-
 
     /**
      * Processes a client request and returns a response frame.
@@ -200,10 +207,9 @@ class ServerApp(
         }
     }
 
-
     /**
-     *Executes a command with the specified name and arguments, and returns the result.
-     *@param [token] the authorization token to use when executing the command.
+     * Executes a command with the specified name and arguments, and returns the result.
+     * @param [token] the authorization token to use when executing the command.
      */
     private fun execute(commandName: String, args: Array<Any>, token: String): CommandResult {
         val command = commandManager.getCommand(commandName)
@@ -225,10 +231,10 @@ class ServerApp(
     }
 
     /**
-     *Updates database tables using [Database.updateTables].
+     * Updates database tables using [Database.updateTables].
      */
     fun updateTables() {
         val database: Database by inject()
-        database.updateTables()
+        database.updateTables(Bands, Users)
     }
 }
