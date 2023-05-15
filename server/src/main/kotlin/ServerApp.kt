@@ -28,6 +28,7 @@ import kotlin.concurrent.write
 /**
  * The ServerApp class represents the server application that listens to incoming client requests,executes them and sends back the response.
  */
+
 class ServerApp(
     private val gatewayAddress: String,
     private val gatewayPort: Int
@@ -36,7 +37,6 @@ class ServerApp(
     private val frameSerializer by inject<Serializer<Frame>>()
     private var isActive = true
     private val tokenManager by inject<Tokenizer>()
-
     private val logger = KotlinLogging.logger {}
     private lateinit var channel: SocketChannel
     private val executor = Executors.newFixedThreadPool(10)
@@ -46,13 +46,16 @@ class ServerApp(
     private val readLock = ReentrantReadWriteLock().readLock()
 
     /**
-     * Starts the server and listens for incoming client requests.
+     * Connects to the GatewayLBService and starts two threads to receive and process requests.
      */
     fun start() {
         try {
+            // Open a socket channel and connect to the GatewayLBService
             channel = SocketChannel.open()
             channel.socket().connect(InetSocketAddress(gatewayAddress, gatewayPort), 5000)
             logger.info { "Подключено к GatewayLBService: $gatewayAddress:$gatewayPort" }
+
+            // Create a thread for receiving requests from GatewayLBService
             val receiveThread = Thread {
                 while (isActive) {
                     try {
@@ -67,6 +70,7 @@ class ServerApp(
             }
             receiveThread.start()
 
+            // Create a thread for processing requests and sending responses
             val processThread = Thread {
                 while (isActive) {
                     val request = requestQueue.take()
@@ -106,6 +110,8 @@ class ServerApp(
 
     /**
      * Receives a frame from the GatewayLBService.
+     *
+     * @return the received frame.
      */
     private fun receiveFromGatewayLBService(): Frame {
         val array = ArrayList<Byte>()
@@ -118,7 +124,6 @@ class ServerApp(
                 char = channel.socket().getInputStream().read()
             }
             val str = String(array.toByteArray())
-            logger.info { str }
             val frame = frameSerializer.deserialize(str)
             logger.info { "Получен ответ от GatewayLBService ${frame.type}" }
             return frame
@@ -130,9 +135,8 @@ class ServerApp(
     /**
      * Processes a client request and returns a response frame.
      *
-     * @param [request] the request frame received from the client
-     * @return the response frame to be sent back to the client
-     *
+     * @param [request] the request frame received from the client.
+     * @return the response frame to be sent back to the client.
      */
     private fun serverRequest(request: Frame): Frame {
         try {
@@ -182,12 +186,11 @@ class ServerApp(
         }
     }
 
-
     /**
-     * Sends the provided [response] to the gateway.
+     * Sends the provided [response] frame to the gateway.
      *
-     * @param response [Frame] object to be sent.
-     * @param address the address to include in the response frame.
+     * @param [response] The [Frame] object to be sent as a response.
+     * @param [address] The address to be included in the response frame.
      */
     private fun sendResponse(response: Frame, address: String?) {
         if (address != null) {
@@ -209,7 +212,11 @@ class ServerApp(
 
     /**
      * Executes a command with the specified name and arguments, and returns the result.
+     *
+     * @param [commandName] the name of the command to execute.
+     * @param [args] the arguments to pass to the command.
      * @param [token] the authorization token to use when executing the command.
+     * @return the result of executing the command.
      */
     private fun execute(commandName: String, args: Array<Any>, token: String): CommandResult {
         val command = commandManager.getCommand(commandName)
@@ -231,7 +238,7 @@ class ServerApp(
     }
 
     /**
-     * Updates database tables using [Database.updateTables].
+     * Updates the database tables.
      */
     fun updateTables() {
         val database: Database by inject()
