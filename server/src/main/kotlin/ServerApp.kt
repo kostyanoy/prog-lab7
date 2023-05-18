@@ -22,6 +22,7 @@ import java.nio.channels.SocketChannel
 import java.util.concurrent.BlockingQueue
 import java.util.concurrent.Executors
 import java.util.concurrent.LinkedBlockingQueue
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.locks.ReentrantReadWriteLock
 import kotlin.concurrent.write
 
@@ -69,7 +70,7 @@ class ServerApp(
 
             val processThread = Thread {
                 while (isActive) {
-                    val request = requestQueue.take()
+                    val request = requestQueue.poll(1000, TimeUnit.MILLISECONDS) ?: continue
                     executor.execute {
                         val response = serverRequest(request)
                         responseExecutor.execute {

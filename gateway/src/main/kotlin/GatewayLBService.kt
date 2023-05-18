@@ -45,16 +45,14 @@ class GatewayLBService(
      * @param [key] the selection key to lock.
      * @param [action] the action to execute.
      */
-    private suspend fun lockKey(key: SelectionKey, action: () -> Job) = withContext(Dispatchers.IO) {
+    private suspend fun lockKey(key: SelectionKey, action: suspend () -> Job) = withContext(Dispatchers.IO) {
         if (key.attachment() == null) {
             key.attach(Mutex())
         }
         val mutex = key.attachment() as Mutex
         if (mutex.tryLock()) {
-            launch {
-                action().join()
-                mutex.unlock()
-            }
+            action().join()
+            mutex.unlock()
         }
     }
 
